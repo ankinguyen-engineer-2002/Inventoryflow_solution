@@ -324,7 +324,7 @@ Re-reading my own Q1–Q6 from the [scale questions](#-but-heres-what-i-keep-ask
 
 | My concern | How Solution A handles it today | When Solution A stops being enough |
 |---|---|---|
-| **Q1: 10k files/day** | Single-instance Postgres + 5 BullMQ workers ≈ 50–100 files/day comfortably | At ~500 dealers — migrate to B (Iceberg) per [`ADR-009`](./adr/ADR-INDEX.md) |
+| **Q1: 10k files/day** | Single-instance Postgres + 5 BullMQ workers ≈ 50–100 files/day comfortably | At ~500 dealers — migrate to B (Iceberg) per ADR-009 in the impl repo |
 | **Q2: 1M files/day** | Doesn't fit. M1 Max alone can't do this. | At ~5,000 dealers — migrate to D (AWS Big Data + streaming) |
 | **Q3: Multi-system input** | Pluggable `ingestion_patterns` + `dealer_pattern_bindings` registry (seeded; runtime dispatcher deferred to dealer #2) | When 3rd OEM ships data via a non-xlsx format — switch on the dispatcher |
 | **Q4: Cross-timezone team** | Cloud-deployable on Fly.io / Hetzner; 14 ADRs + runbooks committed; sample output makes work verifiable without me | Day one — already designed for this |
@@ -920,8 +920,6 @@ I'd switch to Solution B when **any one** of these holds for two consecutive mon
 Inventoryflow_solution/
 ├── README.md                                    ← you are here
 ├── LICENSE
-├── adr/
-│   └── ADR-INDEX.md                             ← cross-references to 14 ADRs in the impl repo
 ├── assets/
 │   └── CV_Aric_Nguyen.pdf                       ← downloadable CV
 └── docs/
@@ -937,9 +935,10 @@ Inventoryflow_solution/
     ├── 09-engineering-judgment.md               ← the part I think is hard to fake
     ├── 10-data-architecture.md                  ← canonical/serving/analytics model, ownership, lineage
     ├── 11-security-architecture.md              ← IAM, tenant isolation, threat model, supply chain
-    ├── 12-slo-observability.md                  ← SLI/SLO, alerts, error taxonomy, replay semantics
-    └── 17-architecture-truth-table.md           ← **claim vs implementation status — read this to audit**  🆕
+    └── 12-slo-observability.md                  ← SLI/SLO, alerts, error taxonomy, replay semantics
 ```
+
+> **This repo is the solution architecture deliverable** (target state, trade-offs, why). The companion implementation repo at [`inventoryflow-catalog-ingest`](https://github.com/ankinguyen-engineer-2002/inventoryflow-catalog-ingest) owns code, migrations, ADRs, bench results, sample output, and `STATUS.md` (shipped vs demo vs deferred).
 
 ### Reading order for the full ~120 minutes
 
@@ -952,9 +951,10 @@ Inventoryflow_solution/
 7. **[07-output-verification.md](./docs/07-output-verification.md)** — 8 min — *how I know the data is right*
 8. **[11-security-architecture.md](./docs/11-security-architecture.md)** — 10 min — IAM, tenant isolation, threat model
 9. **[12-slo-observability.md](./docs/12-slo-observability.md)** — 10 min — SLI/SLO, alerts, error taxonomy, replay
-10. **[17-architecture-truth-table.md](./docs/17-architecture-truth-table.md)** — 10 min — **the single most senior thing in this repo**: every claim mapped to implemented / demo / deferred with evidence paths
-11. **[08-operations.md](./docs/08-operations.md)** — 10 min — CI/CD, runbooks, risk register, DR
-12. **[09-engineering-judgment.md](./docs/09-engineering-judgment.md)** — 10 min — my closing argument
+10. **[08-operations.md](./docs/08-operations.md)** — 10 min — CI/CD, runbooks, risk register, DR
+11. **[09-engineering-judgment.md](./docs/09-engineering-judgment.md)** — 10 min — my closing argument
+
+For evidence (bench, sample-output, ADRs, "shipped vs demo vs deferred"), see [`STATUS.md`](https://github.com/ankinguyen-engineer-2002/inventoryflow-catalog-ingest/blob/main/STATUS.md) and [`docs/`](https://github.com/ankinguyen-engineer-2002/inventoryflow-catalog-ingest/tree/main/docs) in the implementation repo.
 
 The C and D briefs (04 + 05) are optional reading.
 

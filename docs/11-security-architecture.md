@@ -2,15 +2,11 @@
 
 > The senior critique I anticipate: *"you mentioned WAF + TLS + secrets but where's the IAM model, where's the threat model, where's the supply-chain story?"* This document is that answer.
 
-> ⚠️ **Read this doc together with [`17-architecture-truth-table.md`](./17-architecture-truth-table.md).**
-> The architecture below describes the **target** security posture. Some
-> controls are implemented today; some are simulated for the take-home
-> demo; some are explicit production targets with triggers to un-defer.
-> The truth-table is the single source of "what's actually shipped vs
-> demo vs deferred". Wherever this document and the truth-table appear
-> to conflict, **the truth-table wins.**
+> This document describes the **target** security posture for Solution A. It is design content — what I would build, why I'd build it that way, and which controls I'd defer with a trigger.
+>
+> **For "what's actually shipped today vs demo vs deferred", see [`STATUS.md`](https://github.com/ankinguyen-engineer-2002/inventoryflow-catalog-ingest/blob/main/STATUS.md) in the implementation repo.** This solution repo is the consultant deliverable; the impl repo is the engineering deliverable.
 
-I treat security as five layers. Solution A ships fundamentals in each; the senior version of each layer is documented as deferred work with explicit triggers.
+I treat security as five layers. Each layer below is the target architecture; the implementation repo's `STATUS.md` reports which parts of each layer are shipped, demoed, or deferred.
 
 ---
 
@@ -67,8 +63,6 @@ CREATE POLICY product_images_tenant_scope ON product_images
 ```
 
 The Fastify request handler sets `SET LOCAL app.current_dealer_id = '<from JWT claim>'` at the start of every transaction. Marketplace callers get `all`; dealer-scoped callers get their UUID. **A bug in application code cannot leak cross-tenant data because Postgres rejects the query at the row level.**
-
-> **Setting name:** the GUC is `app.current_dealer_id` (matching migration `0002_row_level_security.sql` in the impl repo). Earlier drafts of this doc said `app.dealer_id`; that drift is closed.
 
 Solution A enables RLS even though we run with one dealer today. This is the **"single-tenant today, multi-tenant by config tomorrow"** pattern. Retrofitting RLS later is a 2-week project with downtime risk; enabling it on day one is a config flag.
 
@@ -260,36 +254,11 @@ Each of these has a specific trigger. **None are appropriate to ship in the take
 
 ---
 
-## What concretely ships in Solution A's security posture today
+## Implementation status
 
-> See [`17-architecture-truth-table.md`](./17-architecture-truth-table.md) for the row-by-row status. Summary here:
+This document is design intent. For the **actual shipped vs demo vs deferred** state of every control above — with code-path evidence — see [`STATUS.md`](https://github.com/ankinguyen-engineer-2002/inventoryflow-catalog-ingest/blob/main/STATUS.md) in the implementation repo.
 
-**Implemented (✅):**
-- Row Level Security on `products`, `product_images`, `stream_events`, `ingest_runs`, `dealer_pattern_bindings` (migration `0002`), and `ingest_audit` (migration `0006`)
-- Per-session tenant context via `SET LOCAL app.current_dealer_id` (migration `0002`)
-- `products.source_dealer_id NOT NULL` — no cross-tenant leak via NULL rows (migration `0006`)
-- Pinned Docker base image, pinned package versions (`pnpm-lock.yaml`, `poetry.lock`, image tags pinned)
-- SHA-pinned GitHub Actions in CI (`.github/workflows/ci.yml`)
-- `pnpm audit` and `pip-audit` steps in CI (advisory at PoC stage)
-- Trivy image scan in CI (advisory at PoC stage)
-- `.env` gitignored; only `.env.example` committed
-- Audit trail on `ingest_runs` + `ingest_audit` (per-dealer aggregation via the `dealer_id` column added in migration `0005`)
-
-**Demo for submission (🧪):**
-- Auth via `x-dealer-id` header (production target: JWT verify middleware — same plugin file)
-- R2 / MinIO returns public URLs (production target: signed URLs via S3-presign)
-- MinIO `mc anonymous set download` for local dev (production target: require credentials)
-
-**Production target — deferred (📐):**
-- Full RBAC role middleware (currently single-role)
-- TLS 1.2+ enforcement at the ingress (provider-level, deploy-time)
-- Platform secret store (Fly.io / Vault) with 90-day rotation
-- Cloudflare WAF custom rules
-- SOC 2 / ISO 27001 controls; pen-test; bug bounty
-- HSM-backed secret storage, CMEK
-- SIEM integration
-
-**The point of the trichotomy:** a senior reviewer can audit the security claim against the impl repo by row. Anything labelled implemented has code-path evidence; anything labelled demo has an explicit production target in the truth table; anything labelled deferred has a trigger condition. Nothing is pretended.
+The split is deliberate: this repo is a **solution architecture deliverable** (what to build, why, trade-offs); the implementation repo is the **engineering deliverable** (what's built, evidence, ADRs).
 
 ---
 

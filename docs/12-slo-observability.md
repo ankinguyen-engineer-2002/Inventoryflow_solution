@@ -254,29 +254,9 @@ Each has a specific trigger. **None ship in the take-home demo.** Naming them ho
 
 ---
 
-## What concretely ships in Solution A's observability posture today
+## Implementation status
 
-> See [`17-architecture-truth-table.md`](./17-architecture-truth-table.md) for row-by-row status.
-
-**Implemented (✅):**
-- Pino structured JSON logs with `run_id` correlation across workers
-- `ingest_audit` table with `dealer_id` + `agreement` columns (added in migration `0005`, backfilled from `ingest_runs`) — per-LLM-call cost / latency / agreement per dealer
-- `ingest_runs` registry — run lifecycle state
-- OpenTelemetry SDK instrumented for the major spans
-- Prometheus `/metrics` endpoint stub (env var to enable)
-- Bench gates in CI on fitment-query latency
-- Sample-output committed for reviewer verification without running anything
-- Error classification in code (the 4-category taxonomy)
-- Idempotency tested (`pnpm test:idempotency`)
-
-**Production target — deferred (📐):**
-- OTLP exporter wired to a concrete backend (Tempo / Honeycomb / Datadog / SigNoz)
-- Severity-routed alerting (PagerDuty for sev-1, Slack/Linear for sev-2)
-- Grafana / Datadog "InventoryFlow Operations" dashboard (the ASCII sketch in this doc)
-- Synthetic monitoring + RUM
-- Chaos engineering / fault-injection drills
-
-The aspirations above are real, scoped, and triggered. The shipped controls are visible in the impl repo and verifiable via the truth table.
+This document is the target SLO/observability posture. For the **actual shipped vs deferred** state of each SLI, alert, and dashboard, see [`STATUS.md`](https://github.com/ankinguyen-engineer-2002/inventoryflow-catalog-ingest/blob/main/STATUS.md) in the implementation repo.
 
 ---
 
