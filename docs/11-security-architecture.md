@@ -58,15 +58,17 @@ ALTER TABLE product_images ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ingest_audit ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY products_tenant_scope ON products
-    USING (source_dealer_id = current_setting('app.dealer_id')::uuid
-        OR current_setting('app.dealer_id') = 'all');
+    USING (source_dealer_id = current_setting('app.current_dealer_id')::uuid
+        OR current_setting('app.current_dealer_id') = 'all');
 
 CREATE POLICY product_images_tenant_scope ON product_images
-    USING (source_dealer_id = current_setting('app.dealer_id')::uuid
-        OR current_setting('app.dealer_id') = 'all');
+    USING (source_dealer_id = current_setting('app.current_dealer_id')::uuid
+        OR current_setting('app.current_dealer_id') = 'all');
 ```
 
-The Fastify request handler sets `SET LOCAL app.dealer_id = '<from JWT claim>'` at the start of every transaction. Marketplace callers get `all`; dealer-scoped callers get their UUID. **A bug in application code cannot leak cross-tenant data because Postgres rejects the query at the row level.**
+The Fastify request handler sets `SET LOCAL app.current_dealer_id = '<from JWT claim>'` at the start of every transaction. Marketplace callers get `all`; dealer-scoped callers get their UUID. **A bug in application code cannot leak cross-tenant data because Postgres rejects the query at the row level.**
+
+> **Setting name:** the GUC is `app.current_dealer_id` (matching migration `0002_row_level_security.sql` in the impl repo). Earlier drafts of this doc said `app.dealer_id`; that drift is closed.
 
 Solution A enables RLS even though we run with one dealer today. This is the **"single-tenant today, multi-tenant by config tomorrow"** pattern. Retrofitting RLS later is a 2-week project with downtime risk; enabling it on day one is a config flag.
 
@@ -84,7 +86,7 @@ Cross-dealer global image dedup (the same fastener photo used by Kayo + Honda) i
 
 | Threat path | Mitigation |
 |---|---|
-| Application code forgets to set `app.dealer_id` | Postgres rejects the query (default-deny policy); CI integration test verifies |
+| Application code forgets to set `app.current_dealer_id` | Postgres rejects the query (default-deny policy); CI integration test verifies |
 | JWT claim spoofed | JWT signature verified server-side; rotation every 7d |
 | R2 URL guessed | URLs are SHA-256-prefixed (entropy 256 bits); signed URLs expire in 15 min |
 | Cross-tenant via materialised view | Materialised views inherit RLS in Postgres 15+; explicit `WITH (security_barrier)` set |
