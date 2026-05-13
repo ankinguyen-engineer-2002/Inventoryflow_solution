@@ -420,11 +420,11 @@ The plane separation is deliberate. **Ingress** is request reception only — no
 | Image storage | R2 / MinIO | S3, GCS | R2 has identical S3 SDK + **zero egress fees**; MinIO for local reviewer parity |
 | Cache (LLM) | JSONL on disk | SQLite, Redis | Zero native deps (no Xcode); human-readable; committed to git for reviewer |
 
-### JSONB fitment design — the test specification's hot path
+### JSONB fitment design — the serving shape (not the only shape)
 
-This is the section I think the brief is most pointedly testing. My answer:
+This is the section I think the brief is most pointedly testing. **My honest framing: JSONB is the right *serving* shape for the marketplace-API access pattern. A canonical / analytics shape can — and at scale, should — live alongside it.** This isn't "JSONB beats join tables" universally; it's "JSONB beats joins *for this query pattern at this scale*".
 
-**Schema:**
+**Schema (serving shape):**
 ```json
 [
   {"year": 2016, "make": "Kayo", "model": "Predator 125",
@@ -442,13 +442,23 @@ ON products USING GIN (fitment jsonb_path_ops);
 
 I chose `jsonb_path_ops` over default `jsonb_ops` because it's ~30% smaller and faster for the `@>` containment pattern that dominates marketplace queries. Trade-off accepted: no key-existence (`?`) operator support, which I don't use.
 
-**Measured query** on 3,938 products (1,000 samples):
+**Measured fitment-containment query performance** on the test dataset (1,000 samples on a single dev machine). The numbers I see live in `docs/bench/bench-results.json` of the impl repo. **At submission-time scale, p99 is in the sub-2ms range** — well under the SLO bar I'd commit to ([`docs/12-slo-observability.md`](./docs/12-slo-observability.md)).
 
-| p50 | p95 | p99 | max |
-|---|---|---|---|
-| **0.61 ms** | **0.83 ms** | **1.07 ms** | **3.16 ms** |
+**Where the JSONB shape stops being the right answer:**
 
-**Why I didn't normalise:** The brief explicitly asks for a JSON column on `products`. A `product_fitments` join table would require a network hop on every catalog API call; marketplaces consume the JSON shape directly. I do materialise a `vehicle_models` lookup table post-ingest (one SQL pass: `SELECT DISTINCT make, model_code, year FROM products, jsonb_to_recordset(fitment)`) — that's the right place for relational integrity on vehicle metadata without paying for it on every query.
+| Access pattern | JSONB serving shape | Better answer |
+|---|---|---|
+| `WHERE fitment @> '[{...}]'` (point lookup) | ✅ Wins | — |
+| `WHERE fitment->'year' BETWEEN 2016 AND 2020` (range across all parts) | ⚠️ GIN doesn't help with `->` range; full scan | Normalised `fitments` table OR analytics OLAP cube |
+| Updating one fitment in a 50-element JSONB array | ⚠️ Whole-row rewrite + WAL | Normalised row delete + insert |
+| Validating make/model/year combinations against a vehicle dictionary | ⚠️ Application-level only | FK to canonical `vehicle_models` |
+| `GIN` index size at 50 M products with 30-element fitment arrays | ⚠️ Multi-GB index, slower vacuum | Hash-partition `products` + denormalised analytics fact table |
+
+**Why I didn't normalise *in the serving layer*:** the brief explicitly asks for a JSON column on `products`, the dominant query is point-lookup containment, and marketplace consumers want the JSON shape directly. **Why I'd still maintain the canonical shape** ([`docs/10-data-architecture.md`](./docs/10-data-architecture.md)): governance, write-path correctness, and analytics queries don't share the serving layer's access pattern.
+
+I do materialise a `vehicle_models` lookup table post-ingest (`SELECT DISTINCT make, model_code, year FROM products, jsonb_to_recordset(fitment)`) — that's a half-step toward the canonical shape. At Solution B scale, the full normalised `fitments` table lives in the Iceberg silver layer and Postgres holds only the serving denormalisation.
+
+This is the dual-model pattern I've shipped at Ashley Furniture: a serving warehouse table optimised for Direct Lake queries + a canonical fact table optimised for governance and analytics. **The architecture commits to multiple shapes of the same conceptual entity.** Full discussion in [`docs/10-data-architecture.md`](./docs/10-data-architecture.md).
 
 ### Image handling — SHA-256 idempotency
 

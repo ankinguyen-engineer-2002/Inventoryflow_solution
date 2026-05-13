@@ -165,25 +165,42 @@ LIMIT 10;
 |:---:|:---:|:---:|:---:|
 | **0.60 ms** | **0.87 ms** | **1.02 ms** | **1.32 ms** |
 
-### Why I didn't normalise
+### Why I didn't normalise *in the serving layer*
 
-The naive alternative I considered is a `product_fitments` join table:
+**The honest framing:** JSONB is the right *serving* shape for the marketplace-API access pattern. A canonical / normalised shape can — and at scale should — exist alongside it. The architecture commits to **multiple logical shapes of the same conceptual entities**, not "JSONB wins everywhere". The full multi-shape data architecture is in [`docs/10-data-architecture.md`](./10-data-architecture.md).
+
+The naive *single-shape* alternative I considered is a `product_fitments` join table:
 ```
 products (id, part_number, ...) → product_fitments (product_id, year, make, model, ...)
 ```
 
-Arguments for normalisation:
-- ✅ Referential integrity to a `vehicle_models` master
-- ✅ Faster aggregate queries ("how many parts fit Kayo Predator?")
+**For the serving layer (point-lookup containment queries), JSONB wins:**
+- ✅ Test specification explicitly asks for a JSON column on `products`
+- ✅ Every catalog API call avoids a network hop — single-table read
+- ✅ Marketplaces consume the JSON shape directly; no re-materialisation on export
 
-Arguments against (which won for me):
-- ❌ Test specification explicitly asks for a JSON column on `products`
-- ❌ Every catalog API call requires a join — single-table is one less network hop
-- ❌ Marketplaces consume the JSON shape directly; the join would re-materialise on every export
-- ❌ I can materialise `vehicle_models` from `fitment` in one SQL pass (`SELECT DISTINCT make, model_code, year FROM products, jsonb_to_recordset(fitment)`)
-- ❌ Updates are batch (re-ingest the catalog) not individual; the integrity concern is less load-bearing for me
+**For the canonical layer (governance, write-path, analytics), the join table wins:**
+- ✅ Referential integrity to a `vehicle_models` master via FK
+- ✅ Faster aggregate queries ("all parts fitting year range 2016–2020 across all models")
+- ✅ Single-fitment updates don't rewrite a 30-element JSONB array (no write amplification)
+- ✅ FK enforcement of valid make/model/year combinations
 
-In my view the denormalised JSONB is the correct shape for this access pattern. I build the materialised `vehicle_models` table (35 rows from this dataset) post-ingest to serve drop-down population.
+**My architectural commitment:** carry both shapes. Today, only the serving JSONB is physically materialised. The canonical fitments table is *derivable* and materialised when one of the access patterns it serves becomes hot enough to justify the storage + sync cost. The trigger conditions live in [`docs/10-data-architecture.md`](./10-data-architecture.md). At Solution B (year 2 scale), the normalised `fitments` table is a first-class Iceberg silver-layer table.
+
+### What about JSONB at 50 M products?
+
+A panel would reasonably ask about GIN index size, vacuum behaviour, and write amplification at 50 M products with 30-element fitment arrays. Honest answers:
+
+| Concern | At 1 dealer (today) | At 50 M products (post-scale) | Mitigation |
+|---|---|---|---|
+| GIN index size | sub-100 MB | could be multi-GB | Hash-partition `products` by `dealer_id` (Phase 3); per-partition GIN indexes |
+| `VACUUM` on JSONB | seconds | minutes | Hot-standby partitioning + scheduled `VACUUM` per partition |
+| Updating one fitment in a 30-element array | sub-millisecond | sub-millisecond per row, but rewrites whole row + WAL | Migrate write path to normalised `fitments` table; JSONB becomes a derived projection |
+| Range queries on year (`fitment->>'year'`) | acceptable on 4k rows | full-scan on 50M rows | Normalised `fitments` table for analytics; partial expression index `((fitment->>'year')::int)` for hot patterns |
+
+I'd start serving from JSONB; switch the write path to normalised at Phase 3 (1,500+ dealers); keep JSONB as a derived serving projection thereafter. The serving API doesn't see this transition because the projection step preserves the JSONB shape.
+
+I do materialise a `vehicle_models` table post-ingest (`SELECT DISTINCT make, model_code, year FROM products, jsonb_to_recordset(fitment)`). That's a half-step toward the full normalised shape — covers the drop-down / dictionary use case without paying for the full fitments-as-rows table today.
 
 ---
 
@@ -396,30 +413,32 @@ flowchart LR
 
 Single-instance Postgres, Redis, BullMQ worker, R2. Docker-compose for local; one Fly.io or Railway deployment for production. Manageable by a TypeScript engineer with no DBA support.
 
-### Phase 2 (500–1,500 dealers, ~1 week of my time)
+> **Honest caveat on the effort estimates below.** These are *pure engineering implementation* time, not production-ready time. In a real production environment each item also requires migration design, backfill, load testing, failure-mode testing, staged rollout with rollback paths, on-call training, and (for security-sensitive items) a security review. **A reasonable rule of thumb is to multiply pure-engineering hours by ~2× to ~3× for "ready to send to production".** I'm naming this explicitly because optimistic effort estimates are the single most common credibility gap in architecture documents.
 
-| Change | Why I'd do it | Effort |
-|---|---|---|
-| PgBouncer transaction-mode pool | 3× connection capacity without horizontal scale | 2 h |
-| Kubernetes workers (10 replicas) | Independent scaling of parse/upload/enrich | 1 d |
-| Redis Cluster (3 nodes) | Queue throughput; cache distribution | 1 d |
-| Read replica + read/write split | Catalog API reads off replica; ingestion writes primary | 1 d |
-| R2 bucket sharding `hash(dealer_id) % 16` | Per-bucket request limit; tenant isolation | 4 h |
-| Materialised view for hot fitment queries | Sub-millisecond on top-1000 vehicle queries | 4 h |
-| LLM cache → shared Redis | Global cache hit rate; cross-instance dedup | 2 h |
+### Phase 2 (500–1,500 dealers, ~1 week pure engineering · ~2-3 weeks production-ready)
 
-### Phase 3 (1,500–5,000 dealers, ~3–4 weeks of my time)
+| Change | Why I'd do it | Engineering | Production-ready |
+|---|---|---|---|
+| PgBouncer transaction-mode pool | 3× connection capacity without horizontal scale | 2 h | 1 day (load + failover test) |
+| Kubernetes workers (10 replicas) | Independent scaling of parse/upload/enrich | 1 d | 3 days (HPA tuning, chaos testing) |
+| Redis Cluster (3 nodes) | Queue throughput; cache distribution | 1 d | 3 days (failover drill, migration plan) |
+| Read replica + read/write split | Catalog API reads off replica; ingestion writes primary | 1 d | 2 days (replication-lag SLO, consistent-read fallback) |
+| R2 bucket sharding `hash(dealer_id) % 16` | Per-bucket request limit; tenant isolation | 4 h | 1 day (zero-downtime migration plan) |
+| Materialised view for hot fitment queries | Sub-millisecond on top-1000 vehicle queries | 4 h | 1 day (refresh strategy, freshness SLO) |
+| LLM cache → shared Redis | Global cache hit rate; cross-instance dedup | 2 h | 1 day (eviction policy + cache warmup) |
 
-| Change | Why I'd do it | Effort |
-|---|---|---|
-| Hash-partition `products` by dealer_id (16 partitions) | OLTP write fan-out at this scale | 3 d |
-| Per-tenant Redis namespace | Isolation and quota | 2 d |
-| CQRS write/read separation | Stop OLAP queries blocking catalog API | 1 wk |
-| Global canonical-translations table | LLM cost containment | 2 d |
-| MDCP runtime dispatcher | Dealer-specific ingestion patterns | 3 d |
-| Per-tenant SLO tracking + tracing | Multi-dealer support and debugging | 2 d |
-| Logical replication standby + auto-failover | RTO < 1 hour | 3 d |
-| Cloudflare CDN for image egress | Reduce R2 GET costs | 1 d |
+### Phase 3 (1,500–5,000 dealers, ~3–4 weeks pure engineering · ~8-12 weeks production-ready)
+
+| Change | Why I'd do it | Engineering | Production-ready |
+|---|---|---|---|
+| Hash-partition `products` by dealer_id (16 partitions) | OLTP write fan-out at this scale | 3 d | 2 weeks (online partition migration, zero-downtime cutover) |
+| Per-tenant Redis namespace | Isolation and quota | 2 d | 1 week (quota tuning, eviction policy per tenant) |
+| CQRS write/read separation | Stop OLAP queries blocking catalog API | 1 wk | 3 weeks (consistency model, fallback paths, replication-lag handling) |
+| Global canonical-translations table | LLM cost containment | 2 d | 1 week (data migration, cache invalidation rollout) |
+| MDCP runtime dispatcher | Dealer-specific ingestion patterns | 3 d | 2 weeks (first-3-dealer rollout, error envelope, rollback) |
+| Per-tenant SLO tracking + tracing | Multi-dealer support and debugging | 2 d | 1 week (dashboard, alerting calibration, per-tenant runbook) |
+| Logical replication standby + auto-failover | RTO < 1 hour | 3 d | 2 weeks (failover drills, RPO verification, false-failover handling) |
+| Cloudflare CDN for image egress | Reduce R2 GET costs | 1 d | 3 days (cache invalidation strategy, hot-path verification) |
 
 ### Beyond Phase 3 — when I'd migrate to Solution B
 
