@@ -32,6 +32,75 @@
 
 ---
 
+<details>
+<summary><b>👤 Who's writing this (click to expand) — short career arc + full CV inline</b></summary>
+
+<br/>
+
+I'm **Aric Nguyen** — Data Engineer / Solution Architect, 4 years building production data platforms across Microsoft Fabric, Azure, Databricks, and open-source lakehouses.
+
+Quick career arc:
+
+| Period | Role | What I built |
+|---|---|---|
+| **Jan 2026 – Present** | Data Engineer / Solution Architect, **Ashley Furniture Industries** (US HQ-aligned) | Refactor of global supply-chain analytics platform on Microsoft Fabric: 5,000+ enterprise tables, 30 years of history, billions of records. Designed a metadata-driven control plane; cut mart cycle from ~60 min to ~20 min via DAG parallel execution; reached ~91% compatibility with US HQ enterprise warehouse patterns |
+| **Mar 2023 – Jan 2026** | Data Engineer / Analytics Engineer, **Ecentric** | Owned the full data platform on Microsoft Fabric + Azure. Led phased zero-downtime migration from Azure to Fabric; built end-to-end real-time streaming pipelines + metadata-driven PySpark medallion; shipped 15+ Power BI reports across Sales / Finance / HR / Service; reduced manual reporting effort by 70%+ |
+| **Mar 2023 – Jan 2024** | Data Engineer (Contract), **TheSocietyPass (SOPA Vietnam)** | Co-built streaming-capable platform: Airbyte batch + Debezium CDC + WebSocket → Redpanda → Flink SQL; Iceberg + dbt + Trino batch medallion; dual-write to ClickHouse (hot) and Iceberg / MinIO (cold) |
+| **Jan 2022 – Nov 2022** | Data Engineer (promoted from Data Analyst Intern in 3 months), **ADP** | dbt + PostgreSQL HR/payroll transformations; Airflow DAGs; deployed OpenMetadata for governance |
+
+**Certifications:** Microsoft DP-700 (Fabric Data Engineer Associate) · HackerRank SQL (Advanced) · Google Data Analytics
+**Languages:** Vietnamese (native) · English (TOEIC 780, daily cross-border collaboration with US HQ)
+
+<details>
+<summary><b>📄 Full CV — PDF + page images inline</b></summary>
+
+<br/>
+
+**Download the PDF:** [`assets/CV_Aric_Nguyen.pdf`](./assets/CV_Aric_Nguyen.pdf)
+
+<br/>
+
+#### Page 1
+
+![CV — page 1](./assets/cv-page-1.png)
+
+#### Page 2
+
+![CV — page 2](./assets/cv-page-2.png)
+
+</details>
+
+What that means in plain terms: I've made enough wrong architectural calls in production to have opinions about which ones matter, and I've made enough right ones to be willing to defend them in a design review.
+
+</details>
+
+<details>
+<summary><b>💭 My personal opinion (click to expand) — the framework + risk + scale + platform-pivot framing</b></summary>
+
+<br/>
+
+In my view: **to run a business reliably, you need solid infrastructure underneath. To build solid infrastructure, the data engineer responsible has to know enough to make it work AND enough to know when to change it.**
+
+What "enough to make it work" looks like to me:
+
+- **Frameworks** — Spark, Iceberg, dbt, Dagster, Kafka, the cloud platforms — at debugging depth, not slide depth
+- **Processes** — CDC, schema evolution, idempotency, lineage, DQ contracts, RPO / RTO, cutover gates
+- **End-to-end operations and steps** — from source extraction through serving to consumer feedback, and back through cost monitoring to architectural revision
+
+**That's necessary, but in my experience it isn't sufficient.** What I think separates a senior data engineer / solution architect is the willingness to think one level above:
+
+- **Recognising the risks that haven't shown up yet** — schema drift, cost overruns, vendor lock-in, talent attrition, regulatory change, source-system collapse, marketplace API breakage, dealer schema churn
+- **Anticipating scale and optimisation pressure** — not "will it handle more rows" (every modern stack does that), but "at what dealer count does my Postgres become the bottleneck, and is my migration path to a lakehouse already drawn?"
+- **Knowing when to pivot platforms or tech stacks** — Fabric → Databricks, Postgres → Iceberg, paid LLM → self-hosted — decisions I don't want to be making under pressure; I want them made with a trigger and a plan
+
+**That's why I drafted four solutions, not one.** I treat each as a credible end-state for a different future the company might head toward. My recommendation is conditional on the read of which future is the real one.
+
+**For this brief's scale — one OEM, ~100 dealers, hiring TS engineers — my recommendation is Solution A.** I defend it across three scale tiers (today, year 2, year 3) in [`docs/02-solution-A-recommended.md`](./docs/02-solution-A-recommended.md). The other three solutions are documented at honest depth so my choice isn't ignorance of the alternatives.
+
+</details>
+
+---
+
 ## 🎯 The pitch in 30 seconds
 
 > **I'd build Solution A now, plan Solution B for year two, document C and D so the decision is on record.** Solution A matches the JD stack 1:1 (TypeScript / Node / Postgres / Redis / BullMQ / R2), ships in days, and costs ~$30/dealer/month at amortised scale. B, C, and D are the futures I'd reach for under specific conditions — Iceberg lakehouse at 500+ dealers, Microsoft Fabric if the company commits to that ecosystem, AWS Big Data if cloud-native streaming dominates. This repo is the full argument: why I picked A, where I expect it to break, and what replaces it when it does.
@@ -114,67 +183,6 @@ These implicit signals shaped my submission as much as the explicit asks did:
 | **15 minutes** | This README, top to bottom | All four solutions with diagrams + my reasoning |
 | **30 minutes** | This README + [`02-solution-A`](./docs/02-solution-A-recommended.md) | Full A deep-dive: tech rationale, JSONB design, LLM strategy, scale roadmap |
 | **90 minutes** | All 12 docs (order suggested in [`reading-order`](#-reading-order-for-the-full-90-minutes)) | The whole argument, end-to-end |
-
----
-
-## 💭 My personal opinion — the part I want to be explicit about
-
-In my view: **to run a business reliably, you need solid infrastructure underneath. To build solid infrastructure, the data engineer responsible has to know enough to make it work AND enough to know when to change it.**
-
-What "enough to make it work" looks like to me:
-
-- **Frameworks** — Spark, Iceberg, dbt, Dagster, Kafka, the cloud platforms — at debugging depth, not slide depth
-- **Processes** — CDC, schema evolution, idempotency, lineage, DQ contracts, RPO / RTO, cutover gates
-- **End-to-end operations and steps** — from source extraction through serving to consumer feedback, and back through cost monitoring to architectural revision
-
-**That's necessary, but in my experience it isn't sufficient.** What I think separates a senior data engineer / solution architect is the willingness to think one level above:
-
-- **Recognising the risks that haven't shown up yet** — schema drift, cost overruns, vendor lock-in, talent attrition, regulatory change, source-system collapse, marketplace API breakage, dealer schema churn
-- **Anticipating scale and optimisation pressure** — not "will it handle more rows" (every modern stack does that), but "at what dealer count does my Postgres become the bottleneck, and is my migration path to a lakehouse already drawn?"
-- **Knowing when to pivot platforms or tech stacks** — Fabric → Databricks, Postgres → Iceberg, paid LLM → self-hosted — decisions I don't want to be making under pressure; I want them made with a trigger and a plan
-
-**That's why I drafted four solutions, not one.** I treat each as a credible end-state for a different future the company might head toward. My recommendation is conditional on the read of which future is the real one.
-
-**For this brief's scale — one OEM, ~100 dealers, hiring TS engineers — my recommendation is Solution A.** I defend it across three scale tiers (today, year 2, year 3) in [`docs/02-solution-A-recommended.md`](./docs/02-solution-A-recommended.md). The other three solutions are documented at honest depth so my choice isn't ignorance of the alternatives.
-
----
-
-## 👤 Who's writing this
-
-I'm **Aric Nguyen** — Data Engineer / Solution Architect, 4 years building production data platforms across Microsoft Fabric, Azure, Databricks, and open-source lakehouses.
-
-Quick career arc:
-
-| Period | Role | What I built |
-|---|---|---|
-| **Jan 2026 – Present** | Data Engineer / Solution Architect, **Ashley Furniture Industries** (US HQ-aligned) | Refactor of global supply-chain analytics platform on Microsoft Fabric: 5,000+ enterprise tables, 30 years of history, billions of records. Designed a metadata-driven control plane; cut mart cycle from ~60 min to ~20 min via DAG parallel execution; reached ~91% compatibility with US HQ enterprise warehouse patterns |
-| **Mar 2023 – Jan 2026** | Data Engineer / Analytics Engineer, **Ecentric** | Owned the full data platform on Microsoft Fabric + Azure. Led phased zero-downtime migration from Azure to Fabric; built end-to-end real-time streaming pipelines + metadata-driven PySpark medallion; shipped 15+ Power BI reports across Sales / Finance / HR / Service; reduced manual reporting effort by 70%+ |
-| **Mar 2023 – Jan 2024** | Data Engineer (Contract), **TheSocietyPass (SOPA Vietnam)** | Co-built streaming-capable platform: Airbyte batch + Debezium CDC + WebSocket → Redpanda → Flink SQL; Iceberg + dbt + Trino batch medallion; dual-write to ClickHouse (hot) and Iceberg / MinIO (cold) |
-| **Jan 2022 – Nov 2022** | Data Engineer (promoted from Data Analyst Intern in 3 months), **ADP** | dbt + PostgreSQL HR/payroll transformations; Airflow DAGs; deployed OpenMetadata for governance |
-
-**Certifications:** Microsoft DP-700 (Fabric Data Engineer Associate) · HackerRank SQL (Advanced) · Google Data Analytics
-**Languages:** Vietnamese (native) · English (TOEIC 780, daily cross-border collaboration with US HQ)
-
-<details>
-<summary><b>📄 Click to view my full CV (PDF + page images inline)</b></summary>
-
-<br/>
-
-**Download the PDF:** [`assets/CV_Aric_Nguyen.pdf`](./assets/CV_Aric_Nguyen.pdf)
-
-<br/>
-
-#### Page 1
-
-![CV — page 1](./assets/cv-page-1.png)
-
-#### Page 2
-
-![CV — page 2](./assets/cv-page-2.png)
-
-</details>
-
-What that means in plain terms: I've made enough wrong architectural calls in production to have opinions about which ones matter, and I've made enough right ones to be willing to defend them in a design review. **This submission is how I'd answer the InventoryFlow brief — recommendation first, reasoning second, alternatives third.**
 
 ---
 
