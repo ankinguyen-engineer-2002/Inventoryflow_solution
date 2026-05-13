@@ -922,6 +922,8 @@ Inventoryflow_solution/
 ├── LICENSE
 ├── adr/
 │   └── ADR-INDEX.md                             ← cross-references to 14 ADRs in the impl repo
+├── assets/
+│   └── CV_Aric_Nguyen.pdf                       ← downloadable CV
 └── docs/
     ├── 00-tldr.md                               ← 3-minute decision
     ├── 01-problem-framing.md                    ← my adversarial read of the brief
@@ -931,22 +933,40 @@ Inventoryflow_solution/
     ├── 05-solution-D-aws-brief.md               ← AWS big-data brief
     ├── 06-llm-strategy.md                       ← how I'd approach the AI tooling question
     ├── 07-output-verification.md                ← how I know the data is right
-    ├── 08-operations.md                         ← CI/CD, security, observability, scale, governance
-    └── 09-engineering-judgment.md               ← the part I think is hard to fake
+    ├── 08-operations.md                         ← CI/CD, ops, runbooks, risk register
+    ├── 09-engineering-judgment.md               ← the part I think is hard to fake
+    ├── 10-data-architecture.md                  ← canonical/serving/analytics model, ownership, lineage  🆕
+    ├── 11-security-architecture.md              ← IAM, tenant isolation, threat model, supply chain  🆕
+    └── 12-slo-observability.md                  ← SLI/SLO, alerts, error taxonomy, replay semantics  🆕
 ```
 
-### Reading order for the full 90 minutes
+### Reading order for the full ~110 minutes
 
 1. **[00-tldr.md](./docs/00-tldr.md)** — 3 min — my verdict and the migration triggers
 2. **[01-problem-framing.md](./docs/01-problem-framing.md)** — 8 min — what I think the brief is really testing
 3. **[02-solution-A-recommended.md](./docs/02-solution-A-recommended.md)** — 25 min — the path I'd ship, deep
 4. **[06-llm-strategy.md](./docs/06-llm-strategy.md)** — 10 min — the AI tooling section the brief specifically asks for
-5. **[03-solution-B-de-standard.md](./docs/03-solution-B-de-standard.md)** — 15 min — what I'd build at scale instead
-6. **[07-output-verification.md](./docs/07-output-verification.md)** — 8 min — *how I know the data is right*
-7. **[08-operations.md](./docs/08-operations.md)** — 10 min — CI/CD, security, scale, governance
-8. **[09-engineering-judgment.md](./docs/09-engineering-judgment.md)** — 10 min — my closing argument
+5. **[10-data-architecture.md](./docs/10-data-architecture.md)** — 12 min — canonical / serving / analytics model, ownership, lineage
+6. **[03-solution-B-de-standard.md](./docs/03-solution-B-de-standard.md)** — 15 min — what I'd build at scale instead
+7. **[07-output-verification.md](./docs/07-output-verification.md)** — 8 min — *how I know the data is right*
+8. **[11-security-architecture.md](./docs/11-security-architecture.md)** — 10 min — IAM, tenant isolation, threat model
+9. **[12-slo-observability.md](./docs/12-slo-observability.md)** — 10 min — SLI/SLO, alerts, error taxonomy, replay
+10. **[08-operations.md](./docs/08-operations.md)** — 10 min — CI/CD, runbooks, risk register, DR
+11. **[09-engineering-judgment.md](./docs/09-engineering-judgment.md)** — 10 min — my closing argument
 
 The C and D briefs (04 + 05) are optional reading.
+
+### Reading map by panel role
+
+If you're skimming with a specific evaluator hat on:
+
+| If you're reviewing as a… | Hit these in order |
+|---|---|
+| **Senior Engineer** | 00 → 02 → 06 → 09 |
+| **Data Architect / Principal** | 01 → 10 → 02 → 07 → 03 |
+| **Security / Compliance** | 11 → 08 (CI/CD + risk register) → 10 (classification + retention) |
+| **SRE / Production Architect** | 12 → 08 → 02 (scale roadmap) → 07 |
+| **Engineering Manager** | 00 → 09 → 01 → 02 |
 
 ---
 
