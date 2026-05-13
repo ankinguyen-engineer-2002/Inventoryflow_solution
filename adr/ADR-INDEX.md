@@ -31,8 +31,7 @@ My discipline: **every non-obvious choice gets an ADR before the code that depen
 | **012** | Data contracts + schema registry | Zod schemas are my contract at Solution A. Schema-registry-based contracts deferred to Solution B. | [07-output-verification](../docs/07-output-verification.md) + [08-operations](../docs/08-operations.md#my-data-contracts) |
 | **013** | DR / BCP / RPO / RTO | Phase-specific targets. Phase 1 = 24h RPO / 4h RTO; migration to B unlocks `VERSION AS OF` for sub-15min RTO. | [08-operations](../docs/08-operations.md#disaster-recovery--business-continuity) |
 | **014** | Metadata-driven control plane | Three registry tables seeded (`dealers`, `ingestion_patterns`, `dealer_pattern_bindings`); runtime dispatcher deferred to dealer #2. | [02-solution-A](../docs/02-solution-A-recommended.md#ten-engineering-decisions-id-defend) |
-
-(I skipped ADR-011 during numbering — a small discipline failure of mine; I'm calling it out so the gap is visible rather than retroactively renumbered.)
+(I skipped ADR-011 during numbering — a small discipline failure of mine; I'm calling it out so the gap is visible rather than retroactively renumbered. ADR-015+ are tracked in the implementation repo and not yet referenced here until the corresponding measurements are verified end-to-end.)
 
 ---
 

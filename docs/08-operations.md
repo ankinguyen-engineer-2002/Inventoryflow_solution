@@ -368,4 +368,161 @@ These are the things that compound over years of running data platforms, in my e
 
 ---
 
+## 🚨 My risk register + incident runbooks
+
+A senior architect's job isn't just to draw the happy path — it's to know what fails, when, and how to fix it under pressure. Below are the risks I'm tracking and the runbooks I'd hand to whoever is on call.
+
+### Risk register
+
+| # | Risk | Likelihood | Impact | My mitigation |
+|---|---|---|---|---|
+| R-01 | OEM dealer changes xlsx schema without notice | High | High (silent corruption) | Section detector fails loud; signature whitelist; data-quality preflight halts run |
+| R-02 | LLM cost spike (cache miss flood) | Medium | High (budget overrun) | `ingest_audit.cost_usd` daily aggregation alert when >30% of cloud bill |
+| R-03 | LLM hallucinates / outputs malformed JSON | Medium | Medium (visible to consumer) | Schema validation rejects invalid outputs; 2-phase hybrid (2B fast + 7B refine) for vision OCR |
+| R-04 | Postgres connection pool exhaustion at peak | Medium | High (API down) | PgBouncer transaction-mode pool (Phase 2); CI bench guards p95 latency |
+| R-05 | R2 PUT cost surprise (no SHA-256 dedup) | Low | Medium | SHA-256 idempotent uploads (ADR-003) — already measured 76% dedup rate |
+| R-06 | Dealer-supplied translations are wrong | High | Medium (marketplace listing errors) | LLM audit mode flagged 16% disagreements on 68 sampled — known, surfaced to review queue |
+| R-07 | Vendor lock-in (Cloudflare R2 outage) | Low | High (catalog images inaccessible) | MinIO local-dev parity; S3-compatible SDK; switch is config change |
+| R-08 | Single developer (bus-factor=1) | Very High | Very High (project stalls) | 14 ADRs document every non-obvious decision; runbooks committed; sample-output makes work verifiable without me |
+| R-09 | Schema migration breaks production | Medium | Very High | Drizzle migrations run in transaction with rollback; side-by-side non-destructive deploy pattern (ADR-013) |
+| R-10 | Track A → Track B migration takes longer than planned | High | Medium | ADR-009 documents 6-week migration plan with explicit cutover gates; not a sprint |
+
+**My note on R-08**: this is the single biggest risk in any solo or small-team data platform, and it's the one I see explicitly skipped in most architecture documents. ADRs and runbooks are the only durable mitigation.
+
+### Runbook 1 — LLM cost share > 30% of cloud bill (R-02)
+
+**Trigger:** Slack alert from cost-monitor cron when `SUM(cost_usd) > 0.3 × monthly_cloud_bill` over the last 7 days.
+
+**Diagnosis:**
+```sql
+-- top 10 cache-miss culprits
+SELECT
+  input_sha256, COUNT(*), SUM(cost_usd),
+  ARRAY_AGG(DISTINCT field) AS fields
+FROM ingest_audit
+WHERE cache_hit = false AND created_at > NOW() - INTERVAL '7 days'
+GROUP BY 1 ORDER BY 2 DESC LIMIT 10;
+
+-- per-dealer cost share
+SELECT
+  d.name, SUM(a.cost_usd) AS cost,
+  COUNT(*) FILTER (WHERE NOT a.cache_hit) AS misses
+FROM ingest_audit a
+JOIN ingest_runs r ON a.run_id = r.run_id
+JOIN dealers d ON r.dealer_id = d.dealer_id
+WHERE a.created_at > NOW() - INTERVAL '7 days'
+GROUP BY 1 ORDER BY 2 DESC;
+```
+
+**Common root causes + fixes:**
+1. **New dealer onboarding** — cold cache for their unique Chinese strings → expected, lasts ~1 week → no action
+2. **Prompt template version bump** — `prompt_template_ver` changed, invalidates entire cache → revert or rebuild cache offline
+3. **Cache file corruption or absence** — `shared/llm-cache.jsonl` deleted → restore from git history
+4. **Provider auto-failed over to expensive backup** — check `provider` distribution in audit; force back to `cached`
+
+**Resolution SLA:** 4 hours during business; 24 hours overnight (cost grows linearly, not catastrophic).
+
+### Runbook 2 — Section detector fails on new OEM file (R-01)
+
+**Trigger:** `pnpm ingest` exits with `ERROR: No known section signature matched headers: [...]`
+
+**Diagnosis:** Compare actual header row from the failing file against committed signatures:
+```bash
+docker exec ifc_postgres psql -U dev -d catalog -c "
+  SELECT source_file_sha256, source_sheet, source_row_index, run_id
+  FROM ingest_runs WHERE status = 'failed' ORDER BY started_at DESC LIMIT 5;"
+
+# Then open the xlsx + check the specific sheet's header row.
+```
+
+**Fix:** Add new signature to `src/parse/section-detect.ts`:
+```typescript
+{ name: 'oem-NewVendor-v1',
+  headers: ['part_id', 'name_en', 'description_cn', /*...*/] },
+```
+Then **add a test fixture** in `test/unit/section-detector.test.ts` covering the new signature. CI catches regressions.
+
+**Resolution SLA:** Same day. Source file is held; no production data corruption.
+
+### Runbook 3 — Fitment query p95 > 50 ms regression (R-04)
+
+**Trigger:** Bench CI gate fails (`docs/bench/bench-results.json` shows p95 > 50 ms) OR Datadog/Grafana p95 alert fires on production.
+
+**Diagnosis:**
+```sql
+EXPLAIN ANALYZE
+SELECT part_number, name_en FROM products
+WHERE fitment @> '[{"make":"Kayo","model_code":"AT125-B"}]'
+LIMIT 10;
+
+-- index bloat check
+SELECT pg_size_pretty(pg_relation_size('products_fitment_path_ops_idx')) AS idx_size,
+       pg_size_pretty(pg_relation_size('products')) AS table_size;
+```
+
+**Common root causes:**
+1. **Index bloat** — `REINDEX INDEX CONCURRENTLY products_fitment_path_ops_idx`
+2. **autovacuum starved** — `VACUUM ANALYZE products`
+3. **Plan regression after schema migration** — `ANALYZE products` first; then check stats targets
+4. **Connection pool exhausted** (R-04) — scale PgBouncer; check `pg_stat_activity` for long queries
+
+**Resolution SLA:** 1 hour for production p95 breach. CI is best-effort.
+
+### Runbook 4 — MLX vision worker GPU timeout (M1 Max-specific)
+
+**Trigger:** Worker process exits with `libc++abi: terminating due to uncaught exception of type std::runtime_error: [METAL] Command buffer execution failed: kIOGPUCommandBufferCallbackErrorTimeout`.
+
+**Diagnosis:** Count alive workers; check GPU saturation:
+```bash
+pgrep -f "batch_vision_ocr.py" | wc -l
+macmon pipe -s 1 -i 200 | jq '.gpu_usage'
+```
+
+**Fix:** Cap parallel workers at 5 on M1 Max. M2 Ultra / M3 Max may tolerate 8. Document the hardware limit in the worker launcher. Don't restart the dead worker into the same hot GPU — give it 30 s recovery.
+
+**Resolution SLA:** Workers should self-restart with reduced concurrency. Halt full pipeline if >50% workers die in 5-minute window.
+
+### Runbook 5 — 2B vision model hallucinates ("callout 149") on dense schematics (R-03 specific)
+
+**Trigger:** `mlx-vision-output.<N>.jsonl` records with `"ocr_result": null` AND `raw_output` length > 4 KB AND content sequential `{"n": 1, ..., "n": 99+}`.
+
+**Diagnosis:**
+```python
+# count failures with hallucination signature
+import json
+fails_hallucination = 0
+for line in open("shared/mlx-vision-output.0.jsonl"):
+    d = json.loads(line)
+    if d["ocr_result"] is None and '"n": 99' in d["raw_output"]:
+        fails_hallucination += 1
+```
+
+**Fix:** Route the SHA-256 of any hallucinated-on image into a second-pass list. Run a second OCR pass against those SHAs only, using the 7B model (which doesn't loop). Merge results.
+
+**Resolution SLA:** Async; runs in next batch.
+
+---
+
+## How I'd respond to a production-data corruption incident
+
+This is the scenario I most fear: dealer ingest writes wrong data, downstream catalog API serves it for 6 hours before someone notices.
+
+**Minute 0**: Alert from `data_quality` row count divergence > 5% in `ingest_audit`.
+
+**Minute 5**: Halt all new ingests via feature flag. Page on-call.
+
+**Minute 15**: Identify the bad run via `ingest_runs.run_id`; compute affected `products.id` set.
+
+**Minute 30**: Choose recovery path:
+- **Solution A**: replay from prior `source_file_sha256` if available, OR restore from yesterday's Postgres snapshot (RPO 24 h)
+- **Solution B**: `SELECT * FROM products VERSION AS OF '<timestamp before incident>'` (Iceberg time-travel) → recovery in minutes
+
+**Minute 45**: Reconcile downstream: invalidate marketplace listings tied to affected products; re-sync the next morning.
+
+**Post-mortem**: ADR-NNN documenting the failure mode, the missing guard, and the test that should have caught it.
+
+This is the kind of incident that determines whether Solution A is "good enough" or whether Solution B's `VERSION AS OF` is worth the migration. **Below 500 dealers, A's audit log + snapshot is acceptable. Above that, B's time-travel is non-optional.**
+
+---
+
 **Next:** [09-engineering-judgment.md](./09-engineering-judgment.md) — my closing argument.

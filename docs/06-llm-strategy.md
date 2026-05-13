@@ -230,4 +230,46 @@ My Solution A enforces this by making the cache decorator the *default* implemen
 
 ---
 
+## 🔬 Lessons I'd carry from local self-host into the production design
+
+Even before measuring, several design principles I'd commit to from prior experience running MLX/Ollama and equivalent Iceberg-vision pipelines:
+
+### Model composition beats single-model picks
+
+For catalog OCR, I'd run a **hybrid two-phase pipeline** rather than a single model: a small fast model (2B-class, 4-bit quantized) handles the majority of simple schematics in parallel, and a larger model (7B-class, 8-bit) re-runs only the failures from phase 1. The architectural choice isn't "which model" — it's "which composition of models, with what routing between them".
+
+### GPU contention is the real ceiling on Apple Silicon, not RAM
+
+I expected RAM to be the binding constraint. In practice, Metal's GPU watchdog kills any worker whose inference exceeds the command-buffer timeout, which happens well before RAM runs out. On M1 Max-class hardware I'd plan for a small parallel-worker count (typically ~5) and document the cap as a hardware-specific runbook entry — this isn't in vendor docs.
+
+### Prompt engineering for small models
+
+Small models (2B-class) are literal-minded and break on prompts that work for 7B+ models. Specific lessons I'd encode into the prompt-template versioning:
+
+- **Never use `|` as a choice separator** for small models — they read it as literal string content. Use explicit "one of: a, b, c" enumerations.
+- **Always include a concrete output example**, not just a schema spec.
+- **Compact field names** (`"n"`, `"pos"`) outperform verbose ones on long lists — saves output tokens, reduces truncation risk.
+- **Cap `max_tokens` aggressively but generously** — too tight truncates JSON mid-output, too loose lets small models loop into hallucination.
+
+These are committed in the prompt-template versioning so a future engineer doesn't relearn them by breaking production.
+
+### Cost economics — the architectural lever
+
+At one-shot scale, paid APIs are cheap enough that the self-host argument is *time*, not *cost*. The argument flips at recurring scale (thousands of dealers, tens-of-millions of inferences per year), where local self-host is the only credible answer for cost.
+
+**This is why the `ILLMProvider` abstraction is the centerpiece of my LLM design**: I can pick which engine wins for each scale tier without rewriting business logic. Dev iteration on paid API, audit-pass on local self-host, steady-state production on whichever has the best cost/quality envelope for the team at that moment.
+
+### Production hardening I'd add beyond the take-home
+
+Documented as deferred work, with re-visit triggers in [`08-operations.md`](./08-operations.md):
+
+1. **Repetition-penalty support** — small models can fall into counting/repetition loops; `repetition_penalty=1.1` dampens this. Worth contributing upstream if a runtime doesn't support it.
+2. **Stop-string sequences** — fire JSON close-bracket as a stop sequence to forcibly terminate output. Belt-and-braces against repetition loops.
+3. **Continuous batching server** — single model load + async request queue is more efficient than per-process model loads. Defer until throughput justifies the operational surface area.
+4. **VPC-resident inference (Bedrock, Azure OpenAI)** — for regulated customers requiring data-residency, swap providers via the abstraction without business-logic changes.
+
+These are real next steps. They live as deferral triggers in the implementation repo's ADRs.
+
+---
+
 **Next:** [07-output-verification.md](./07-output-verification.md) — *how I know the data is right.*
