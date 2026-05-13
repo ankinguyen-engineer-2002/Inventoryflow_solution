@@ -427,6 +427,125 @@ Six explicit triggers I defined ([`00-tldr.md`](./00-tldr.md) has my table). The
 
 ---
 
+## 🌍 Cloud deployment & operations — where this actually runs
+
+A local `docker-compose up` is the demo, not the architecture. In my experience the cloud-deployment story gets skipped in too many submissions, and that's the gap between a personal architect project and what a real business needs. Here's how I'd actually run Solution A in production, with concrete SKU choices and trade-offs for each option.
+
+### My recommended path for InventoryFlow today — managed PaaS (Fly.io stack)
+
+```mermaid
+flowchart LR
+    USER[Dealer / API consumer] --> CF[Cloudflare<br/>WAF + DNS + CDN]
+    CF --> FLY[Fly.io app cluster<br/>Fastify + BullMQ workers<br/>2 vCPU · 4 GB]
+    FLY --> NEON[(Neon Postgres<br/>Serverless · branching for PRs)]
+    FLY --> UP[Upstash Redis<br/>Serverless · BullMQ queue]
+    FLY --> R2[(Cloudflare R2<br/>SHA-256 keyed images)]
+    FLY -.-> SENTRY[Sentry<br/>error grouping]
+    FLY -.-> AXIOM[Axiom / Loki<br/>structured logs]
+    FLY -.-> PD[PagerDuty schedule<br/>follow-the-sun on-call]
+
+    style FLY fill:#dcfce7,stroke:#16a34a
+    style NEON fill:#dbeafe,stroke:#2563eb
+    style R2 fill:#fef3c7,stroke:#d97706
+```
+
+**Cost at 1 dealer:** ~$76/month. **At 100 dealers (amortised):** ~$30/dealer/month.
+
+| Component | SKU | Monthly | Why I picked this |
+|---|---|---|---|
+| Compute | Fly.io 2× shared-cpu-2x · 4 GB RAM | $30 | Multi-region capable, single-command deploy, scale-to-zero, machine-restart-on-deploy |
+| Postgres | Neon Pro (1 CU, 10 GB storage) | $40 | Serverless branching enables PR preview envs; auto-pause on idle; point-in-time restore |
+| Redis | Upstash pay-as-you-go | $5–10 | BullMQ-compatible, no provisioning, REST API for serverless contexts |
+| Objects | Cloudflare R2 (50 GB + 100k Class A ops) | $5 | **Zero egress fees** vs S3's $0.09/GB; identical S3 SDK |
+| Observability | Axiom (free tier 0.5 GB/day) + Sentry developer plan | $0–25 | Structured log ingestion + error grouping, both have generous free tiers |
+| TLS / DNS / WAF | Cloudflare (free plan) | $0 | Already in the stack for R2 |
+| On-call | PagerDuty Schedule (1 user free, then $21/user) | $0–21 | Follow-the-sun rotation when team grows past 2 |
+
+### Alternative: cost-optimised VPS (Hetzner)
+
+For a team comfortable with Linux operations:
+
+```mermaid
+flowchart LR
+    USER[Dealer / API consumer] --> CF[Cloudflare<br/>WAF + DNS]
+    CF --> VPS[Hetzner CX31 VPS<br/>2 vCPU · 8 GB · 80 GB SSD<br/>Falkenstein DE]
+    VPS --> PG[(Postgres 16<br/>on same VPS<br/>or separate CX21)]
+    VPS --> RD[Redis 7<br/>on same VPS]
+    VPS --> R2[(Cloudflare R2)]
+    VPS -.-> SS[Self-hosted SigNoz<br/>or Grafana Loki]
+
+    style VPS fill:#fef3c7,stroke:#d97706
+```
+
+**Cost at 1 dealer:** ~$25/month. **At 100 dealers (on a CX41 with separate PG box):** ~$0.50/dealer/month.
+
+Why I'd consider this:
+- Hetzner pricing is 3–5× cheaper than AWS for equivalent compute
+- Single VM means simpler debugging (no managed-service coordination)
+- Linux ops is well-understood, outages have clear logs and `dmesg`
+
+Why I'd hesitate:
+- Manual OS updates, manual security patches, manual TLS renewal
+- Backup and snapshot management is on you
+- No automatic failover if the VPS dies — **RTO is hours, not minutes**
+- Doesn't survive a single-region outage
+
+**Right pick for:** teams with ≥1 Linux-comfortable engineer who values cost over ops simplicity.
+**Wrong pick for:** teams that need RTO < 1 hour or multi-region.
+
+### Enterprise: AWS ECS Fargate
+
+For companies aligned with AWS:
+
+| Component | SKU | Monthly |
+|---|---|---|
+| Compute | ECS Fargate 2 vCPU / 4 GB, 24/7 | $60 |
+| Postgres | RDS db.t4g.medium Multi-AZ | $120 |
+| Redis | ElastiCache cache.t4g.micro | $25 |
+| Objects | S3 + CloudFront (with egress allowance) | $20 |
+| Observability | CloudWatch (logs + metrics + traces) | $30 |
+| **Total** | | **~$255/mo** |
+
+This is ~3× the managed-PaaS option. **My justification isn't cost — it's VPC integration, IAM defaults, multi-region replication, and existing AWS expertise.** I'd pick this only if the company commits to AWS as the corporate standard.
+
+The equivalents for Azure (Container Apps + Azure Database for PostgreSQL + Azure Cache for Redis + Blob Storage) and GCP (Cloud Run + Cloud SQL + Memorystore + Cloud Storage) come out roughly within ±20% of the AWS number.
+
+### Why I'd avoid Kubernetes at this scale
+
+A common mistake I see in architecture interviews: deploying Solution A on EKS / AKS / GKE because "we'll need K8s eventually". My counter-argument:
+
+- **K8s costs $73+/month just for the control plane** (EKS $73, AKS $73, GKE $73, DOKS free) before you run a single workload
+- Solution A is 4 services; K8s makes sense at ~20 services and ≥1 dedicated SRE
+- The operational complexity is real — node upgrades, network policies, RBAC, secrets management, ingress controllers
+- Most importantly: **K8s is excellent at running K8s; it isn't excellent at running 4 Docker containers**
+
+I'd switch to K8s when the team has a dedicated SRE and the workload exceeds what one Fargate task can do (typically Phase 2+ in my scale roadmap above). Until then, managed PaaS gives you 80% of K8s's benefits at 20% of the operational cost.
+
+### Cost comparison at 100 dealers across hosting models
+
+| Hosting | Monthly | Per-dealer | Ops time / month | Multi-region? | RTO |
+|---|---:|---:|---:|---:|---:|
+| Fly.io managed | $130 | $1.30 | ~2 h | Yes | <30 min |
+| Hetzner VPS (CX41 + CX21 PG) | $50 | $0.50 | ~15 h | No | hours |
+| AWS ECS Fargate Multi-AZ | $400 | $4.00 | ~5 h | Yes | <15 min |
+| Azure Container Apps | $380 | $3.80 | ~5 h | Yes | <15 min |
+| EKS Kubernetes + RDS | $700 | $7.00 | ~25 h | Yes | <15 min |
+| Bare-metal Hetzner auction | $100 | $1.00 | ~40 h | No | hours |
+
+Ops time is the hidden cost. **In my experience the "cheap" options are only cheap if you don't price in the engineer's hourly rate.**
+
+### Cross-timezone collaboration patterns I'd add at year 1
+
+- **Preview deployments per PR** via Fly.io machines or Vercel-style branch previews — reviewer in any timezone can poke at the running code
+- **Sentry / Axiom alerts** routed to a Slack channel with PagerDuty Schedule for timezone-aware on-call rotation
+- **Runbooks committed to git** — ADR-013 (DR/BCP) is the template; future runbooks for "what to do when LLM cost spikes", "what to do when an OEM file fails parsing", "what to do when R2 returns 429"
+- **Async PR review** with explicit approval gates from at least one reviewer in a different timezone (CODEOWNERS file)
+- **GitHub Actions environment protection rules** — PROD deploy requires manual approval from a maintainer who isn't the author
+
+This is the operational layer that turns a personal architect project into something a real team can run. The cost of adding it at year 1 is hours; the cost of retrofitting it at year 2 after the first 3 AM outage is days.
+
+---
+
 ## Ten engineering decisions I'd defend
 
 A representative slice of choices I made that aren't obvious from the code. Each has an ADR in the impl repo's [`docs/decisions/`](https://github.com/ankinguyen-engineer-2002/inventoryflow-catalog-ingest/tree/main/docs/decisions).

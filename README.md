@@ -183,6 +183,43 @@ flowchart LR
 
 Excel becomes an *export* of a queryable warehouse, not an input. This is Solution C territory if the company is Microsoft-aligned (what I build at Ashley today), or Solution B + D if not.
 
+### Question 4 — what happens when the team isn't all in one timezone?
+
+I currently work daily across APAC ↔ US HQ at Ashley Furniture, so I'm honest about what cross-timezone teams actually cost. A local `docker-compose up` story works for one developer in one timezone. The day my submission is graded by someone in San Francisco at 2 PM while I'm asleep in Vietnam at 4 AM, the architecture needs to handle that:
+
+- **Cloud-hosted dev / staging environments** anyone on the team can hit without my laptop being awake
+- **Runbooks + on-call rotation** so an alert at 3 AM Vietnam time pages someone in PST instead
+- **Documentation as truth source** — ADRs, READMEs, migration runbooks — not Slack-archaeology
+- **Async-first review** — PRs reviewed by ≥2 people across timezones with explicit approval gates
+- **Bus-factor > 1** — if I'm on vacation, the team must be able to deploy, roll back, and debug without me
+
+This is why my submission isn't just code. It's a code repo + a solution-architecture repo with 14 ADRs + cost economics + migration runbooks. **The submission has to survive me being unreachable.** A personal architect project that only runs on my laptop fails this test; a real enterprise architecture has to pass it.
+
+### Question 5 — local-dev vs production — what does "production" actually mean here?
+
+My Solution A runs in 60 seconds on my M2 Mac. Cool. The M2 Mac isn't production. The real question is *where does this actually run when it's grading inventory for a live marketplace*. I think most submissions stop at the architecture and skip this — but the hosting choice matters as much as the stack choice:
+
+| Hosting model | Best for | Cost shape | Ops floor |
+|---|---|---|---|
+| **Managed PaaS** (Fly.io / Railway / Render) | Pilot, <100 dealers, fast iteration | ~$30/mo at 1 dealer | Lowest — push and forget |
+| **VPS + Docker** (Hetzner / DigitalOcean / Linode) | Cost-optimised, single-region | $15–50/mo | Medium — manual OS updates, manual TLS |
+| **Container-as-service** (AWS ECS Fargate / Azure Container Apps / Cloud Run) | Enterprise-aligned, multi-region | $80–250/mo | Medium — VPC, IAM, observability glue |
+| **Kubernetes** (EKS / AKS / GKE / DOKS) | DE/SRE-capable team, year-2+ scale | $300–1,500/mo + cluster | Highest — K8s expertise required |
+| **Bare-metal** (Hetzner auction / OVH) | Cost-extreme, regulatory locality | $50–150/mo + extensive setup | Highest — everything is yours |
+
+I detail specific deployment recipes for each in [`docs/02-solution-A-recommended.md`](./docs/02-solution-A-recommended.md#-cloud-deployment--operations--where-this-actually-runs). **My default for InventoryFlow today: managed PaaS (Fly.io + Neon Postgres + Upstash Redis + Cloudflare R2).** Ops floor matches the team size; cloud floor matches the dealer count.
+
+### Question 6 — OSS self-host vs managed cloud — what's the real cost when ops time is priced in?
+
+This is the question most submissions never ask. OSS self-host (the natural home for Solution B) saves on licensing but spends on DevOps time. Managed cloud (Fabric / AWS / GCP) costs more in dollars but saves engineer-hours. The crossover depends on:
+
+- **Team size** — 3 engineers cannot run a Kubernetes + Iceberg + Redpanda + RisingWave cluster *and* ship features
+- **Ops maturity** — without an SRE, every outage is a senior developer's evening
+- **Hiring pool** — Python DE talent in Vietnam is scarcer and more expensive than TS talent
+- **Risk tolerance** — managed cloud's reliability >> a 3-person team's reliability, especially at year 1
+
+My honest view: **for InventoryFlow at sub-100 dealers, managed PaaS is the right cloud shape** (specific deployment in [02-solution-A](./docs/02-solution-A-recommended.md#-cloud-deployment--operations--where-this-actually-runs)). Self-host OSS clusters become reasonable when there's a DE who can pager-rotate (detail in [03-solution-B](./docs/03-solution-B-de-standard.md#-cloud-deployment--operations-for-solution-b)). AWS/Fabric become reasonable when there's enterprise capacity commitment.
+
 ### Why this matters for my recommendation
 
 In my view, you can't recommend an architecture without knowing which future the company is heading toward. **The brief doesn't tell me which one, so I drafted answers for all four shapes and made my recommendation conditional on the read.**

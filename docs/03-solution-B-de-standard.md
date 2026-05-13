@@ -256,6 +256,114 @@ The cutover gate is non-negotiable for me: B must demonstrate row-count parity w
 
 ---
 
+## 🌍 Cloud deployment & operations for Solution B
+
+The honest cloud story for Solution B is that **the "OSS everywhere" narrative breaks down at deployment time**. You don't actually want to run Iceberg metadata services, Redpanda clusters, RisingWave nodes, AND a Dagster control plane on a single VM — that's a setup that one outage takes down completely. Here's my realistic deployment matrix for Solution B.
+
+### My recommended path — hybrid: managed objects + self-host compute
+
+```mermaid
+flowchart LR
+    USER[User] --> CF[Cloudflare WAF + DNS]
+    CF --> FLY[Fly.io app cluster<br/>3 machines<br/>Dagster + Polars + dbt-core]
+    FLY --> R2[(Cloudflare R2<br/>Iceberg metadata + data<br/>zero egress fees)]
+    FLY --> PG[(Neon Postgres<br/>serving layer · unchanged from A)]
+    FLY --> RPS[Redpanda Serverless<br/>or self-host on Fly machines]
+    RPS --> RW[RisingWave self-host<br/>on Fly machine]
+    RW --> PG
+    FLY -.-> AXM[Axiom logs + traces<br/>OpenLineage events]
+
+    style R2 fill:#fef3c7,stroke:#d97706
+    style FLY fill:#dcfce7,stroke:#16a34a
+    style PG fill:#dbeafe,stroke:#2563eb
+```
+
+**Cost at 500 dealers:** ~$400/month (~$0.80/dealer/month).
+
+| Component | SKU | Monthly |
+|---|---|---|
+| Compute cluster (Dagster + Polars + dbt) | Fly.io 3× shared-cpu-4x · 8 GB RAM | $180 |
+| Object storage + Iceberg metadata | Cloudflare R2 (500 GB + 1M ops) | $30 |
+| Serving Postgres | Neon Pro Scale plan (multi-branch) | $80 |
+| Streaming | Redpanda Serverless 1 throughput unit | $80 |
+| Observability | Axiom 5 GB/day plan + OpenLineage event ingest | $25 |
+
+Why I pick this shape: **I keep R2 (managed, zero-egress) and Neon (managed, branching) because the ops cost of running my own object store + Postgres HA exceeds the savings.** I self-host the *interesting* compute (Dagster, Polars, dbt) because those are the layers where I want flexibility and where managed equivalents (Astronomer Dagster Cloud, Databricks dbt+Spark) charge 5–10× the self-host cost.
+
+### The cost ceiling story — when does pure self-host pay off?
+
+The Hetzner cluster version, for DE-capable teams:
+
+| Setup | Capacity | Monthly | Per-dealer at scale |
+|---|---|---|---|
+| 3-node Hetzner cluster (3× CX41) + managed PG | ~500 dealers | $130 | **$0.26** |
+| 5-node cluster (3× CX41 compute + 2× CX31 broker) + managed PG | ~2,000 dealers | $260 | $0.13 |
+| 10-node cluster + HA Postgres on dedicated CX51 + Redpanda self-host | ~10,000 dealers | $900 | $0.09 |
+
+**This is where Solution B becomes economically dominant.** Hetzner gives you 3–5× compute-per-dollar vs AWS at the cost of self-managed Linux. For a DE-capable team, this compounds.
+
+My specific Hetzner config I'd use at year 2:
+
+```mermaid
+flowchart LR
+    LB[Hetzner Load Balancer<br/>LB11 · $5/mo] --> N1[Node 1<br/>CX41 · Dagster + dbt + Polars]
+    LB --> N2[Node 2<br/>CX41 · Dagster + dbt + Polars]
+    LB --> N3[Node 3<br/>CX41 · Iceberg writer + RisingWave]
+    N1 --> R2[(Cloudflare R2<br/>Iceberg files)]
+    N2 --> R2
+    N3 --> R2
+    N3 --> RP[Redpanda 3-broker<br/>Hetzner CX31 · 3 nodes]
+    N1 --> NEON[(Neon Postgres<br/>still managed)]
+
+    style R2 fill:#fef3c7,stroke:#d97706
+    style NEON fill:#dbeafe,stroke:#2563eb
+```
+
+Hidden ops cost: **at least 1 DE-week per month maintaining this**. K8s isn't required at this scale — `systemd` + a Terraform module is sufficient and dramatically simpler.
+
+### Where I'd give up self-host and move to managed (becomes Solution D)
+
+Trigger conditions for "stop running Iceberg yourself, pay AWS to":
+
+- Team has no Linux / SRE depth
+- Multi-region replication becomes a hard requirement
+- Compliance audit demands documented vendor SLAs
+- The DE who built the cluster leaves (the **bus-factor-of-one** problem)
+
+At that point, moving to AWS S3 + Glue Catalog + Athena + MSK (Solution D) costs ~$2,900/mo at 1,000 dealers — but the **ops time saved compounds**, and the SLAs are someone else's problem.
+
+### Databricks alternative (if budget allows)
+
+A third path between self-host and pure-AWS: **Databricks Serverless** with their Iceberg-compatible Unity Catalog + Delta Lake.
+
+- ~$0.55/DBU; ~$500–1,500/month at this scale
+- Trade: single-vendor commitment (Databricks) in exchange for genuine ops simplification
+- Native dbt + Spark + Photon + Unity Catalog integration
+
+**Right pick if the company has any other Databricks workload.** I'd treat this as Solution B's "managed cousin" — same architectural shape, vastly less ops time.
+
+### Cross-timezone collaboration for Solution B
+
+Solution B is *more* sensitive to timezone gaps than Solution A because Dagster's UI, dbt's CLI, and Iceberg metadata corruption debugging all benefit from synchronous expert help. My mitigations:
+
+- **Dagster Cloud OSS** or self-hosted with a public URL — any team member can see the asset graph
+- **dbt-docs hosted** on a small static site (S3 + CloudFront, $1/month) — lineage discoverable async
+- **Iceberg metadata corruption runbook** documented in the impl repo before year 2 — this is the most common gotcha
+- **Single-writer-per-partition rule** enforced via CODEOWNERS — prevents the most common cause of metadata corruption
+
+### Cost summary across hosting models (at 1,000 dealers)
+
+| Hosting | Monthly | Per-dealer | Ops time/month | When I'd pick |
+|---|---:|---:|---:|---|
+| Fly.io hybrid (recommended) | $400 | $0.40 | ~10 h | Year 2 default, balanced |
+| Hetzner self-host cluster | $260 | $0.26 | ~40 h | DE-rich, cost-sensitive |
+| AWS managed (= Solution D) | $2,900 | $2.90 | ~3 h | AWS-aligned company |
+| Databricks Serverless | $1,000 | $1.00 | ~5 h | Databricks-aligned company |
+
+The hidden line is ops time. **In my experience this is the single biggest miss in OSS-self-host architecture proposals.**
+
+---
+
 ## When I'd *not* pick B
 
 A reverse-test: when would I argue against my own Solution B, even at scale?
