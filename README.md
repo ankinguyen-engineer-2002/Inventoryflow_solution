@@ -62,6 +62,67 @@ What InventoryFlow asked:                       What I delivered:
 
 ---
 
+## 💭 My personal opinion — the part I want to be explicit about
+
+In my view: **to run a business reliably, you need solid infrastructure underneath. To build solid infrastructure, the data engineer responsible has to know enough to make it work AND enough to know when to change it.**
+
+What "enough to make it work" looks like to me:
+
+- **Frameworks** — Spark, Iceberg, dbt, Dagster, Kafka, the cloud platforms — at debugging depth, not slide depth
+- **Processes** — CDC, schema evolution, idempotency, lineage, DQ contracts, RPO / RTO, cutover gates
+- **End-to-end operations and steps** — from source extraction through serving to consumer feedback, and back through cost monitoring to architectural revision
+
+**That's necessary, but in my experience it isn't sufficient.** What I think separates a senior data engineer / solution architect is the willingness to think one level above:
+
+- **Recognising the risks that haven't shown up yet** — schema drift, cost overruns, vendor lock-in, talent attrition, regulatory change, source-system collapse, marketplace API breakage, dealer schema churn
+- **Anticipating scale and optimisation pressure** — not "will it handle more rows" (every modern stack does that), but "at what dealer count does my Postgres become the bottleneck, and is my migration path to a lakehouse already drawn?"
+- **Knowing when to pivot platforms or tech stacks** — Fabric → Databricks, Postgres → Iceberg, paid LLM → self-hosted — decisions I don't want to be making under pressure; I want them made with a trigger and a plan
+
+**That's why I drafted four solutions, not one.** I treat each as a credible end-state for a different future the company might head toward. My recommendation is conditional on the read of which future is the real one.
+
+**For this brief's scale — one OEM, ~100 dealers, hiring TS engineers — my recommendation is Solution A.** I defend it across three scale tiers (today, year 2, year 3) in [`docs/02-solution-A-recommended.md`](./docs/02-solution-A-recommended.md). The other three solutions are documented at honest depth so my choice isn't ignorance of the alternatives.
+
+---
+
+## 👤 Who's writing this
+
+I'm **Aric Nguyen** — Data Engineer / Solution Architect, 4 years building production data platforms across Microsoft Fabric, Azure, Databricks, and open-source lakehouses.
+
+Quick career arc:
+
+| Period | Role | What I built |
+|---|---|---|
+| **Jan 2026 – Present** | Data Engineer / Solution Architect, **Ashley Furniture Industries** (US HQ-aligned) | Refactor of global supply-chain analytics platform on Microsoft Fabric: 5,000+ enterprise tables, 30 years of history, billions of records. Designed a metadata-driven control plane; cut mart cycle from ~60 min to ~20 min via DAG parallel execution; reached ~91% compatibility with US HQ enterprise warehouse patterns |
+| **Mar 2023 – Jan 2026** | Data Engineer / Analytics Engineer, **Ecentric** | Owned the full data platform on Microsoft Fabric + Azure. Led phased zero-downtime migration from Azure to Fabric; built end-to-end real-time streaming pipelines + metadata-driven PySpark medallion; shipped 15+ Power BI reports across Sales / Finance / HR / Service; reduced manual reporting effort by 70%+ |
+| **Mar 2023 – Jan 2024** | Data Engineer (Contract), **TheSocietyPass (SOPA Vietnam)** | Co-built streaming-capable platform: Airbyte batch + Debezium CDC + WebSocket → Redpanda → Flink SQL; Iceberg + dbt + Trino batch medallion; dual-write to ClickHouse (hot) and Iceberg / MinIO (cold) |
+| **Jan 2022 – Nov 2022** | Data Engineer (promoted from Data Analyst Intern in 3 months), **ADP** | dbt + PostgreSQL HR/payroll transformations; Airflow DAGs; deployed OpenMetadata for governance |
+
+**Certifications:** Microsoft DP-700 (Fabric Data Engineer Associate) · HackerRank SQL (Advanced) · Google Data Analytics
+**Languages:** Vietnamese (native) · English (TOEIC 780, daily cross-border collaboration with US HQ)
+
+<details>
+<summary><b>📄 Click to view my full CV (PDF + page images inline)</b></summary>
+
+<br/>
+
+**Download the PDF:** [`assets/CV_Aric_Nguyen.pdf`](./assets/CV_Aric_Nguyen.pdf)
+
+<br/>
+
+#### Page 1
+
+![CV — page 1](./assets/cv-page-1.png)
+
+#### Page 2
+
+![CV — page 2](./assets/cv-page-2.png)
+
+</details>
+
+What that means in plain terms: I've made enough wrong architectural calls in production to have opinions about which ones matter, and I've made enough right ones to be willing to defend them in a design review. **This submission is how I'd answer the InventoryFlow brief — recommendation first, reasoning second, alternatives third.**
+
+---
+
 ## 🤔 But here's what I keep asking myself before I commit to *any* architecture
 
 In my experience, the brief is one OEM, one xlsx, one pilot. That's never the steady state. So I want to put a few harder questions on the table before I lock in a stack.
@@ -125,24 +186,6 @@ Excel becomes an *export* of a queryable warehouse, not an input. This is Soluti
 ### Why this matters for my recommendation
 
 In my view, you can't recommend an architecture without knowing which future the company is heading toward. **The brief doesn't tell me which one, so I drafted answers for all four shapes and made my recommendation conditional on the read.**
-
----
-
-## 🧭 My personal philosophy
-
-To run a business reliably on data, you need solid infrastructure underneath. To build solid infrastructure, the data engineer responsible has to:
-
-1. **Master the frameworks** — Spark, Iceberg, dbt, Dagster, Kafka, cloud platforms — at debugging depth
-2. **Master the process** — ingestion patterns, CDC, schema evolution, idempotency, lineage, DQ contracts, RPO / RTO, cutover gates
-3. **Master the end-to-end workflow** — from source extraction through serving to consumer feedback, and back through cost monitoring to architectural revision
-
-**But that's not enough.** What separates a data engineer from a solution architect, in my view, is willingness to think one level above:
-
-- **What risks haven't shown up yet?** Schema drift, cost overruns, vendor lock-in, talent attrition, regulatory change, source-system collapse
-- **What does scale do to the architecture?** Not "will it handle more rows", but "at what dealer count does my Postgres become the bottleneck, and is my migration path to a lakehouse ready?"
-- **When do I switch platforms or tech stacks?** Fabric → Databricks, Postgres → Iceberg, paid LLM → self-hosted — decisions I don't make under pressure, I make with a trigger and a plan
-
-That's why I drafted **four** solutions, not one. For this brief's scale (one OEM, ~100 dealers, hiring TS engineers), I recommend **A** — and I defend it across three scale tiers in [`02-solution-A-recommended.md`](./docs/02-solution-A-recommended.md).
 
 ---
 
@@ -589,31 +632,6 @@ I built the full submission (this doc repo + the implementation repo with 4 solu
 My honest framing: AI is a productivity multiplier for things I already know how to do. It compresses the typing and the boilerplate. **It doesn't produce the architecture decisions** — those are mine, recorded as ADRs, and trace back to specific things I learned at Ashley Furniture (Fabric refactor), Ecentric (Azure → Fabric zero-downtime migration), SOPA (Iceberg + Flink streaming platform), and ADP (dbt + OpenMetadata governance).
 
 If AI vanished tomorrow I'd build this slower, not differently.
-
----
-
-<details>
-<summary><b>👋 About me (click to expand)</b></summary>
-
-<br/>
-
-I'm **Aric Nguyen**, a Data Engineer / Solution Architect based in Bình Dương, Vietnam, with 4 years of building production data platforms across Microsoft Fabric, Azure, Databricks, and open-source lakehouses.
-
-**Currently** at Ashley Furniture Industries (US HQ-aligned, Jan 2026 – Present) — leading the global supply-chain analytics platform refactor: 5,000+ enterprise tables, 30 years of history, billions of records. Designed a metadata-driven control plane separating platform concerns (registry, generic load runner, lineage builder, DQ engine, audit, scheduler) from data layers. Cut end-to-end mart cycle from ~60 min to ~20 min through DAG-based parallel execution. Reached ~91% compatibility with US HQ enterprise warehouse patterns.
-
-**Before that** (Mar 2023 – Jan 2026) at Ecentric — owned the full data platform on Microsoft Fabric and Azure. Architected hybrid Lakehouse + Warehouse; led phased zero-downtime migration from Azure (ADF + Azure SQL DB) to Fabric; built end-to-end real-time streaming pipelines; engineered metadata-driven medallion engine in PySpark; shipped 15+ Power BI reports across Sales / Finance / HR / Service.
-
-**Also** (Mar 2023 – Jan 2024, contract) at SOPA / TheSocietyPass — co-built streaming-capable platform: Airbyte batch + Debezium CDC + WebSocket converged into Redpanda; Flink SQL stream processing; Iceberg + dbt + Trino batch medallion; dual-write to ClickHouse (hot) and Iceberg/MinIO (cold).
-
-**And earlier** (Jan 2022 – Nov 2022) at ADP — promoted from Data Analyst Intern to Data Engineer in 3 months. dbt + PostgreSQL HR/payroll transformations; Airflow DAGs; deployed OpenMetadata for governance.
-
-**Stack depth:** Python · SQL (T-SQL, Spark SQL, PostgreSQL) · DAX · M · JavaScript / TypeScript · Microsoft Fabric · Azure (Data Factory, Synapse, SQL DB, Data Lake Storage Gen2, Functions, Event Hub, Key Vault, Entra ID, DevOps) · Databricks · Delta Lake · Direct Lake · Iceberg · Trino · MinIO · ClickHouse · Airflow · Dagster · Airbyte · OpenMetadata · Kafka / Redpanda · Flink · Debezium · OpenAI / Claude API · Azure OpenAI · MCP server design · prompt engineering · RAG patterns
-
-**Certifications:** Microsoft DP-700 (Fabric Data Engineer Associate); HackerRank SQL (Advanced); Google Data Analytics. **English:** TOEIC 780, daily cross-border collaboration.
-
-What that means in plain terms: I've made enough wrong architectural calls in production to have opinions about which ones matter, and I've made enough right ones to be willing to defend them in a design review. This submission is how I'd answer the InventoryFlow brief — recommendation first, reasoning second, alternatives third.
-
-</details>
 
 ---
 
