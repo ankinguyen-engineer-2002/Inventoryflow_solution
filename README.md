@@ -51,6 +51,61 @@ What InventoryFlow asked:                       What I delivered:
 
 ---
 
+## 📋 The brief — what InventoryFlow actually asked
+
+Verbatim from the Talemy × InventoryFlow Senior Engineer test PDF (08 May 2026):
+
+> *"At InventoryFlow, we receive parts catalog data from hundreds of different distributors and OEMs. This data is extremely messy, often arriving in unstructured formats like PDFs containing a mix of schematic images, part numbers, and multilingual text. Your task is to standardize it all, give us a clean database that contains the schematic image uploaded into an R2 bucket, along with the part numbers, the English name, the Chinese name, and everything clean and organized. There should also be a JSON column that outlines every year, make, and model that the part fits."*
+
+### The 5 explicit deliverables
+
+1. **Standardize messy multi-format input** → clean database
+2. **Upload schematic images** → Cloudflare R2
+3. **Tabular columns** → part number, English name, Chinese name
+4. **JSON column** listing every `{year, make, model}` the part fits
+5. **AI tooling** to parse the messy content (the brief specifically calls out Cursor / Windsurf / Copilot for coding, OpenAI / Claude for vision)
+
+### The 3 success criteria the brief explicitly names
+
+| Criterion | What the brief says | How I read it |
+|---|---|---|
+| **Pragmatism & Speed** | *"How quickly and accurately can you solve this using modern tools?"* | Three-command run, sample output committed, demo in under 90 seconds |
+| **AI Tooling** | *"We highly encourage the use of AI coding tools or Vision LLMs to parse the messy PDF and map the data."* | 6-provider abstraction, audit table, cache discipline; cost discipline is implicit |
+| **Clean Architecture** | *"How you structure the final Database Schema, especially the JSONB Fitment column, shows us your understanding of catalog architectures."* | The single biggest architecture lever in the brief — denormalised JSONB with `GIN jsonb_path_ops` |
+
+### The anti-pattern the brief explicitly names
+
+> *"We are NOT looking for over-engineered, enterprise-heavy boilerplates."*
+
+In my reading, this is permission to omit **specific complexity** (microservices, DDD, hexagonal, onion architecture) — not permission to omit **specific discipline** (ADRs, audit table, migration triggers, cost economics). I drafted the submission against that distinction.
+
+### The test data they handed me
+
+| Attribute | Value |
+|---|---|
+| File | `Copy of Example Data for Engineer.xlsx` |
+| Size | **241 MB** |
+| Sheets | **110** |
+| Embedded schematic images | **1,586** |
+| Languages | English + Chinese (multilingual) |
+| OEM | Kayo ATV catalog |
+| Structure | Mix of parts tables across **three header signatures** (chassis · engine · U8) + **12 reference exception sheets** + drawing-XML-anchored images |
+| Format anomaly | Brief mentions "PDF" but ships `.xlsx` — implicit: handle whatever messy format shows up |
+
+### 5 things the brief doesn't say out loud (but tests for)
+
+These implicit signals shaped my submission as much as the explicit asks did:
+
+1. **PDF mentioned but xlsx delivered** → implicit ask for a *pluggable ingestion pattern*, with xlsx as the first concrete handler. Drives the `dealer_pattern_bindings` design.
+2. **"Hundreds of distributors and OEMs"** appears once. In my view it's the single most important architectural constraint — implies metadata-driven onboarding, not per-dealer code branches.
+3. **"Especially the JSONB fitment column"** is the senior-engineering tell. The brief is testing whether I know denormalised JSONB + GIN `jsonb_path_ops` beats a join table for the dominant query pattern ("parts fitting vehicle X").
+4. **"AI tooling encouraged"** is silent on cost, accuracy verification, audit, and "what if the model is wrong". The silence is the test — answered in [`06-llm-strategy.md`](./docs/06-llm-strategy.md).
+5. **"Not enterprise-heavy boilerplates"** is permission to skip *specific complexity*. My discipline (ADRs, audit table, migration triggers, output verification, cost economics) is non-negotiable — these aren't boilerplate, they're how production data systems age well.
+
+**My fuller adversarial read of the brief lives in [`docs/01-problem-framing.md`](./docs/01-problem-framing.md).**
+
+---
+
 ## 📚 Pick your reading path
 
 | You have… | Read this | What you get |
