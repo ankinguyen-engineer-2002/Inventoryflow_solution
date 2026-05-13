@@ -1,18 +1,18 @@
-# Solution D — AWS Big Data + Streaming (executive brief)
+# Solution D — AWS Big Data + Streaming (my executive brief)
 
 > *S3 + Apache Iceberg · Glue Catalog · Kinesis · MSK · Lambda · Step Functions · Athena · Redshift · DMS · DynamoDB*
 >
-> The right answer when AWS is the corporate standard, multi-region is required, and ops simplicity matters more than vendor flexibility.
+> This is the architecture I'd recommend when AWS is the corporate standard, multi-region is required, and ops simplicity matters more than vendor flexibility.
 
 ---
 
-## 60-second pitch
+## My 60-second pitch
 
-AWS's data + streaming services, composed natively, give you the same architectural shape as Solution B (Iceberg lakehouse + streaming bus + dbt-style transformations + analytical query engine) — but with every component managed by AWS. The trade is vendor lock-in and ~30% higher cost in exchange for "you don't run Kafka, you don't run Iceberg metadata service, you don't run dbt Cloud yourself".
+In my view, AWS's data + streaming services, composed natively, give you the same architectural shape as my Solution B (Iceberg lakehouse + streaming bus + dbt-style transformations + analytical query engine) — but with every component managed by AWS. The trade I'm making is vendor lock-in and ~30% higher cost in exchange for "I don't run Kafka, I don't run Iceberg metadata service, I don't run dbt Cloud myself".
 
 ---
 
-## Architecture sketch
+## My architecture sketch
 
 ```mermaid
 flowchart LR
@@ -69,11 +69,11 @@ flowchart LR
     style GC fill:#fef3c7,stroke:#d97706
 ```
 
-The Iceberg + Glue Catalog combination is doing the work that the Lakehouse / OneLake combination does on Fabric. Different vendor, same architectural shape.
+The Iceberg + Glue Catalog combination is doing the work that the Lakehouse / OneLake combination does on Fabric. Different vendor, same architectural shape in my view.
 
 ---
 
-## What D does that B (open-source self-host) doesn't
+## What I think D does that B (open-source self-host) doesn't
 
 | Capability | AWS native | OSS B equivalent |
 |---|---|---|
@@ -87,13 +87,13 @@ The Iceberg + Glue Catalog combination is doing the work that the Lakehouse / On
 | **CloudWatch + X-Ray observability** | Default-on | OpenTelemetry + collector + Prometheus + Grafana |
 | **Multi-region replication** | S3 + Kinesis cross-region native | Custom |
 
-For an AWS-committed organisation, every row above is "click to configure" instead of "stand up infrastructure". For a non-AWS-committed organisation, every row is also "your data lives in AWS forever" — the lock-in is real.
+For an AWS-committed organisation, every row above is "click to configure" instead of "stand up infrastructure" in my view. For a non-AWS-committed organisation, every row is also "your data lives in AWS forever" — the lock-in is real.
 
 ---
 
-## Honest cost economics
+## My honest cost economics
 
-AWS managed services carry roughly a 30% markup over self-hosted equivalents on equivalent workloads. The numbers below are for 1,000 dealers/week steady state:
+AWS managed services carry roughly a 30% markup over self-hosted equivalents on equivalent workloads, in my experience. The numbers below are my estimates for 1,000 dealers/week steady state:
 
 | Component | Estimated monthly | Note |
 |---|---|---|
@@ -112,16 +112,16 @@ AWS managed services carry roughly a 30% markup over self-hosted equivalents on 
 | CloudWatch + X-Ray | $80 | Logs + traces |
 | **Total** | **~$2,900/month** | At 1,000 dealers ≈ **$2.90/dealer** |
 
-Compared to Solution B self-hosted at ~$0.50/dealer at the same scale, AWS is **~5× more expensive** at this size. The justification is *not* cost — it's:
+Compared to my Solution B self-hosted at ~$0.50/dealer at the same scale, AWS is **~5× more expensive** at this size. In my view the justification is *not* cost — it's:
 
 - No DevOps headcount needed
 - Multi-region replication trivial
-- VPC + IAM + KMS gives you compliance defaults
+- VPC + IAM + KMS gives me compliance defaults
 - AWS Marketplace + Bedrock + SageMaker integrations available
 
 ---
 
-## When D is the right answer
+## When I'd say D is the right answer
 
 | Situation | AWS? |
 |---|---|
@@ -131,38 +131,38 @@ Compared to Solution B self-hosted at ~$0.50/dealer at the same scale, AWS is **
 | Streaming + batch unified, high volume | ✅ MSK + Kinesis + Iceberg native |
 | Want SageMaker / Bedrock for ML | ✅ Tight integration |
 | Per-dealer ops cost matters more than infra cost | ✅ Lower DevOps headcount |
-| Cost optimization is critical | ❌ B (self-host) is ~5× cheaper |
+| Cost optimization is critical | ❌ B (self-host) is ~5× cheaper in my estimate |
 | Open-source-first / vendor-portable culture | ❌ Heavy AWS lock-in |
 | Microsoft is the corporate standard | ❌ Use Fabric instead |
-| Small data (<10 TB) | ❌ Over-engineered |
+| Small data (<10 TB) | ❌ Over-engineered, in my view |
 
 ---
 
-## What I would do differently from a textbook AWS reference architecture
+## What I'd do differently from a textbook AWS reference architecture
 
-If I were actually deploying D, the deviations from AWS's reference architectures would be:
+If I were actually deploying D, my deviations from AWS's reference architectures would be:
 
 1. **Iceberg on S3, not Delta Lake on S3.** AWS recently improved Delta Lake support; I'd still pick Iceberg for vendor-portability if the migration trigger ever fires the other way.
 
-2. **Trino on EMR Serverless instead of Athena for hot-path analytics.** Athena's per-query billing is excellent for ad-hoc; for production catalog queries hit many times per minute, Trino self-managed (or via Starburst) is cheaper.
+2. **Trino on EMR Serverless instead of Athena for hot-path analytics.** Athena's per-query billing is excellent for ad-hoc; for production catalog queries hit many times per minute, I think Trino self-managed (or via Starburst) is cheaper.
 
-3. **dbt-core on ECS Fargate instead of dbt Cloud.** dbt Cloud's per-developer pricing is hard to justify at small team sizes. ECS Fargate + dbt-core + scheduled task is ~$30/month total.
+3. **dbt-core on ECS Fargate instead of dbt Cloud.** I find dbt Cloud's per-developer pricing hard to justify at small team sizes. ECS Fargate + dbt-core + scheduled task is ~$30/month total.
 
-4. **DynamoDB only for hot-path catalog reads, not as the source of truth.** Source of truth is Iceberg Gold. DynamoDB is a sync target with TTL, populated by Step Function tasks. This avoids "DynamoDB went out of sync with the lakehouse" debugging.
+4. **DynamoDB only for hot-path catalog reads, not as the source of truth.** Source of truth is Iceberg Gold. DynamoDB is a sync target with TTL, populated by Step Function tasks. This avoids "DynamoDB went out of sync with the lakehouse" debugging — a failure mode I've seen.
 
 5. **CDC via DMS into Iceberg directly, not into S3 staging first.** Reduces lag. Requires DMS target compatibility (improved as of 2025).
 
 6. **Bedrock for LLM calls instead of OpenAI/Anthropic direct.** Bedrock keeps the data in the AWS VPC, satisfies data-residency conversations, and the model gateway pattern (Claude, Mistral, Titan all behind one API) means swapping models is configuration not rewrite.
 
-These deviations come from operating mixed AWS environments alongside Fabric and OSS lakehouses across my work history. AWS's defaults are sensible but not optimal for every workload.
+These deviations come from me operating mixed AWS environments alongside Fabric and OSS lakehouses across my work history. In my view AWS's defaults are sensible but not optimal for every workload.
 
 ---
 
-## Verdict for InventoryFlow
+## My verdict for InventoryFlow
 
-**Not now, and probably not as a primary recommendation ever** — Solution D is documented as the *credible alternative* if InventoryFlow's parent company turns out to be AWS-standardised. The probability of that is non-zero but unannounced.
+**Not now, and probably not as my primary recommendation ever** — I documented Solution D as the *credible alternative* if InventoryFlow's parent company turns out to be AWS-standardised. The probability of that is non-zero but unannounced.
 
-The reason to include D at all is because senior engineers shouldn't have to choose between B (open-source self-host) and "we'll figure it out". For an AWS-aligned company, D is the answer that already exists.
+My reason to include D at all: I think senior engineers shouldn't have to choose between B (open-source self-host) and "we'll figure it out". For an AWS-aligned company, D is the answer that already exists.
 
 ---
 

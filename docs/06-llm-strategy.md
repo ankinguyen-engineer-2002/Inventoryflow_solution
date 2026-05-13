@@ -1,12 +1,12 @@
-# LLM Strategy — the AI tooling section that the brief actually tests
+# My LLM Strategy — the AI tooling section the brief actually tests
 
-> The brief encourages "Cursor, Windsurf, Copilot" for IDE assistance and "OpenAI, Claude" as Vision LLMs. It is silent on cost, on accuracy verification, and on what happens when the model is wrong. The silence is where the senior signal lives.
+> The brief encourages "Cursor, Windsurf, Copilot" for IDE assistance and "OpenAI, Claude" as Vision LLMs. It's silent on cost, on accuracy verification, and on what happens when the model is wrong. In my view, the silence is where the senior signal lives.
 
 ---
 
-## The four genuine alternatives
+## The four genuine alternatives I considered
 
-Most submissions will pick one of these four. The interesting question is *which* and *why* — and what changes at scale.
+Most submissions will pick one of these four. The interesting question I asked myself was *which* and *why* — and what changes at scale.
 
 | | Provider model | Cost shape | Accuracy ceiling | Operational floor |
 |---|---|---|---|---|
@@ -15,9 +15,9 @@ Most submissions will pick one of these four. The interesting question is *which
 | **3. Free API tier** | Gemini / OpenRouter free models / Cloudflare Workers AI | $0 with rate limits | Medium (smaller models) | Low (HTTP, but TOS risk) |
 | **4. Pure OCR + rules** | Tesseract, PaddleOCR, EasyOCR, Mistral OCR (paid managed) | $0 (OSS) to $0.001/page | Brittle on multilingual, accurate on structured text | Medium (OCR tuning, post-processing) |
 
-Each is a real choice with real consequences. The submission picks **a hybrid** because the workload has two qualitatively different sub-problems:
+Each is a real choice with real consequences. I picked **a hybrid** because in my view the workload has two qualitatively different sub-problems:
 
-| Sub-problem | Best fit |
+| Sub-problem | My best fit |
 |---|---|
 | Translate Chinese part names to English | Paid API with cache + audit (option 1 + cache) |
 | OCR schematic image labels | Either Vision LLM with cache, or PaddleOCR self-hosted (option 4) |
@@ -25,11 +25,11 @@ Each is a real choice with real consequences. The submission picks **a hybrid** 
 | Validate dealer's English translations | Audit-mode against translator backend (option 1 + audit) |
 | Fitment extraction from messy headers | Rule-based parser, no LLM needed |
 
-The lesson: **don't make a single AI tooling choice across the system; make a choice per sub-problem.** The implementation reflects that.
+My lesson: **I don't make a single AI tooling choice across the system; I make a choice per sub-problem.** My implementation reflects that.
 
 ---
 
-## Why this is the most over-spent line item in early-stage data startups
+## Why I think this is the most over-spent line item in early-stage data startups
 
 Every team I've talked to that uses LLMs in a data pipeline does one of these wrong things:
 
@@ -40,11 +40,11 @@ Every team I've talked to that uses LLMs in a data pipeline does one of these wr
 5. **No data-residency conversation** — discovers the model trained on dealer-confidential data
 6. **Doesn't measure cost share** — the LLM bill is invisible until it's $5,000/month
 
-The cumulative effect is a 10–100× cost overspend versus a disciplined implementation. The bill, on workloads I have measured personally, can be in the $300–$3,000/month range when it should be in the $0–$30 range.
+The cumulative effect I've seen is a 10–100× cost overspend versus a disciplined implementation. The bill, on workloads I've measured personally, can be in the $300–$3,000/month range when it should be in the $0–$30 range.
 
 ---
 
-## The decision matrix for InventoryFlow
+## My decision matrix for InventoryFlow
 
 ```mermaid
 flowchart TB
@@ -76,11 +76,11 @@ For InventoryFlow today (all four flows): paid API + aggressive cache + provider
 
 ---
 
-## What Solution A implements (specifics)
+## What I implemented in Solution A (specifics)
 
-Already covered in [`02-solution-A-recommended.md`](./02-solution-A-recommended.md); summarised here.
+I covered this in [`02-solution-A-recommended.md`](./02-solution-A-recommended.md); summarised here.
 
-### The provider abstraction
+### My provider abstraction
 
 Six concrete implementations behind a single `ILLMProvider` interface:
 
@@ -91,17 +91,17 @@ Six concrete implementations behind a single `ILLMProvider` interface:
 | `claude-code-handoff` | $0 | Dev cache seeding (Claude Max subscription) |
 | `ollama` | $0 self-host | Production option |
 | `anthropic-batch` | ~$0.0005/call | Production option |
-| `gemini` | (disabled) | Excluded for data-residency |
+| `gemini` | (disabled) | I excluded for data-residency |
 
-### The cache as architectural lever
+### My cache as architectural lever
 
-`shared/llm-cache.jsonl` is the single most cost-impactful file in the repository. Keyed by SHA-256 of (field name + sorted inputs), it converts repeated translations across runs and across dealers from API calls into local file reads.
+`shared/llm-cache.jsonl` is the single most cost-impactful file in my repository. Keyed by SHA-256 of (field name + sorted inputs), it converts repeated translations across runs and across dealers from API calls into local file reads.
 
-Cache hit rate at steady state across 1,000 dealers ≈ **99%**.
+My cache hit rate at steady state across 1,000 dealers ≈ **99%**.
 
-The cache is committed to git so the reviewer's run consumes zero API budget.
+I committed the cache to git so the reviewer's run consumes zero API budget.
 
-### The audit table as accountability
+### My audit table as accountability
 
 Every LLM call writes a row to `ingest_audit`:
 
@@ -121,15 +121,15 @@ ingest_audit
   created_at              timestamptz
 ```
 
-This makes the LLM a measurable subsystem rather than a black box. Without this table, every "the part numbers are wrong" support ticket is unanswerable. With it, the ticket gets a specific row, a specific cost, a specific disagreement, and a specific re-run path.
+This makes the LLM a measurable subsystem rather than a black box. Without this table, every "the part numbers are wrong" support ticket is unanswerable in my experience. With it, the ticket gets a specific row, a specific cost, a specific disagreement, and a specific re-run path.
 
-This pattern is borrowed from the data-quality preflight gates I built at Ashley Furniture — drift detection and severity-tiered DQ checks halt the pipeline on critical failures. The InventoryFlow audit is the same idea applied to LLM output.
+I borrowed this pattern from the data-quality preflight gates I built at Ashley Furniture — drift detection and severity-tiered DQ checks halt the pipeline on critical failures. My InventoryFlow audit is the same idea applied to LLM output.
 
-### The cost math
+### My cost math
 
 At 1,000 dealers/week, 50 catalog items per dealer, ingestion + audit:
 
-| Stage | Theoretical calls | Cache hit | Real upstream | Cost |
+| Stage | Theoretical calls | Cache hit | Real upstream | My cost |
 |---|---|---|---|---|
 | Cold start (first 50 dealers) | ~50,000 | ~80% | ~10,000 | ~$5 |
 | Steady state (after first 100 dealers) | ~500,000/month | ~99% | ~5,000/month | **~$2.50/month** |
@@ -138,11 +138,11 @@ Most teams I've talked to with similar workloads pay $300–$3,000/month. The 10
 
 ---
 
-## What's deliberately *not* implemented (yet)
+## What I deliberately *didn't* implement (yet)
 
-Five layers of accuracy framework exist in design; only three are in code today.
+I designed five layers of accuracy framework; only three are in code today.
 
-| Layer | In code | Triggered when |
+| Layer | In code | I'd add when |
 |---|---|---|
 | Confidence scoring per call | ✅ | Always-on |
 | Format validation rules | ✅ | Always-on |
@@ -150,7 +150,7 @@ Five layers of accuracy framework exist in design; only three are in code today.
 | Ensemble agreement (two providers) | ❌ designed | LLM cost share > 30% of bill |
 | Marketplace feedback loop | ❌ designed | Marketplace integration ships |
 
-The reason these are deferred: at 1 dealer they don't fire. At 1,000 dealers the failure modes they protect against are real and the engineering investment is justified. Building them today would be the over-engineering the brief explicitly warns against.
+The reason I deferred these: at 1 dealer they don't fire. At 1,000 dealers the failure modes they protect against are real and the engineering investment is justified. Building them today would be the over-engineering the brief explicitly warns me against.
 
 ---
 
@@ -167,18 +167,18 @@ A separate question that comes up in interviews:
 | **Distillation to smaller model** | Frontier model unaffordable at scale | Training compute | Weeks |
 | **Fine-tuning** | Domain *very* different from base model | Training compute + data labelling | Weeks |
 
-For InventoryFlow's translation problem, prompt engineering + cache solves 99% of the cost problem. Fine-tuning would require:
+For InventoryFlow's translation problem, I think prompt engineering + cache solves 99% of the cost problem. Fine-tuning would require:
 
 - A labelled dataset of "Chinese part name → preferred English" (a few thousand pairs)
 - A fine-tuning budget on Anthropic or OpenAI ($50–$500 one-shot)
 - A versioning and re-training strategy as the OEM dictionary evolves
 - Continued audit because fine-tuned models still hallucinate
 
-The break-even is around the 100,000th distinct part name when the per-call savings of a smaller fine-tuned model outpace the maintenance overhead. We are nowhere near that threshold.
+In my view the break-even is around the 100,000th distinct part name when the per-call savings of a smaller fine-tuned model outpace the maintenance overhead. We're nowhere near that threshold.
 
 ---
 
-## Pure OCR alternative (option 4 from the matrix)
+## Pure OCR alternative (option 4 from my matrix)
 
 Worth a separate discussion because the brief mentions "schematic images" prominently.
 
@@ -189,7 +189,7 @@ Worth a separate discussion because the brief mentions "schematic images" promin
 - Predictable latency
 - Easy to self-host
 
-### Why it usually loses for this workload
+### Why I think it usually loses for this workload
 
 - Multilingual schematics with mixed Chinese + English + numeric callouts confuse most OSS OCR
 - Schematic labels are tiny text, often rotated, often overlapping
@@ -205,29 +205,29 @@ Hybrid: **PaddleOCR self-hosted for the schematic image text extraction, Vision 
 - Bottom 20% routed to Vision LLM (Qwen 2.5-VL via Ollama, or Claude Sonnet for higher accuracy)
 - Vision LLM output cached, audited, available for human review
 
-This is the most expensive subsystem to operate. **It's also the subsystem most teams completely skip**, choosing to ingest only the tabular data and ignore the schematic-image OCR entirely. For InventoryFlow's "schematic image uploaded to R2" requirement, the image goes to R2 regardless; whether its callouts get OCRed determines whether the catalog API can answer "which part is this in the schematic" or just "here's the image, you figure it out". Both are valid; the second is what Solution A as shipped does (image upload yes, OCR no), with the OCR pipeline designed but deferred.
+This is the most expensive subsystem to operate. **It's also the subsystem most teams completely skip**, choosing to ingest only the tabular data and ignore the schematic-image OCR entirely. For InventoryFlow's "schematic image uploaded to R2" requirement, the image goes to R2 regardless; whether its callouts get OCRed determines whether the catalog API can answer "which part is this in the schematic" or just "here's the image, you figure it out". Both are valid; the second is what my Solution A as shipped does (image upload yes, OCR no), with the OCR pipeline designed but deferred.
 
 ---
 
-## What scale changes
+## What I'd change at scale
 
-| At this volume | Strategy shifts to |
+| At this volume | My strategy shifts to |
 |---|---|
 | **<100k LLM calls/mo** (today) | Solution A as shipped: paid API + cache + audit |
 | **100k–1M/mo** | Self-host Qwen 2.5 7B on a GPU box ($200/mo) for translations; keep paid API for vision OCR |
 | **1M–10M/mo** | Self-host everything including Vision LLM (Qwen 2.5-VL); paid API as edge-case fallback; global canonical-translation table in Iceberg (Solution B) |
 | **>10M/mo** | Fine-tune a domain-specific model; serve via vLLM on dedicated GPU; pure cost optimisation regime |
 
-The migration path from "paid API everywhere" to "self-hosted with paid edge cases" is exactly the path I'd take. The way to make that migration cheap is to have the provider abstraction in place from day one. **You don't migrate when the cost trigger fires; you migrate when the abstraction is ready and the cost trigger validates the move.**
+The migration path from "paid API everywhere" to "self-hosted with paid edge cases" is exactly the path I'd take. The way I make that migration cheap is to have the provider abstraction in place from day one. **I don't migrate when the cost trigger fires; I migrate when the abstraction is ready and the cost trigger validates the move.**
 
 ---
 
-## The single most important paragraph in this doc
+## My single most important paragraph in this doc
 
 For early-stage companies, the conversation about LLM cost is the conversation about **whether you trust your engineers to enforce cache discipline**. A well-designed system with the discipline costs ~$2.50/month for this workload. The same system with sloppy implementation costs $2,500/month. Hardware doesn't change; the model doesn't change; the prompt doesn't change. What changes is whether anyone bothered to write `cached(provider).translate(...)` instead of `provider.translate(...)` everywhere it counted.
 
-Solution A enforces this by making the cache decorator the *default* implementation. You have to actively turn it off to skip the cache. That choice is the difference between the $2.50 and the $2,500.
+My Solution A enforces this by making the cache decorator the *default* implementation. You have to actively turn it off to skip the cache. In my view that choice is the difference between the $2.50 and the $2,500.
 
 ---
 
-**Next:** [07-output-verification.md](./07-output-verification.md) — *how do you know the data is right?*
+**Next:** [07-output-verification.md](./07-output-verification.md) — *how I know the data is right.*
