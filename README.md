@@ -935,12 +935,13 @@ Inventoryflow_solution/
     ├── 07-output-verification.md                ← how I know the data is right
     ├── 08-operations.md                         ← CI/CD, ops, runbooks, risk register
     ├── 09-engineering-judgment.md               ← the part I think is hard to fake
-    ├── 10-data-architecture.md                  ← canonical/serving/analytics model, ownership, lineage  🆕
-    ├── 11-security-architecture.md              ← IAM, tenant isolation, threat model, supply chain  🆕
-    └── 12-slo-observability.md                  ← SLI/SLO, alerts, error taxonomy, replay semantics  🆕
+    ├── 10-data-architecture.md                  ← canonical/serving/analytics model, ownership, lineage
+    ├── 11-security-architecture.md              ← IAM, tenant isolation, threat model, supply chain
+    ├── 12-slo-observability.md                  ← SLI/SLO, alerts, error taxonomy, replay semantics
+    └── 17-architecture-truth-table.md           ← **claim vs implementation status — read this to audit**  🆕
 ```
 
-### Reading order for the full ~110 minutes
+### Reading order for the full ~120 minutes
 
 1. **[00-tldr.md](./docs/00-tldr.md)** — 3 min — my verdict and the migration triggers
 2. **[01-problem-framing.md](./docs/01-problem-framing.md)** — 8 min — what I think the brief is really testing
@@ -951,8 +952,9 @@ Inventoryflow_solution/
 7. **[07-output-verification.md](./docs/07-output-verification.md)** — 8 min — *how I know the data is right*
 8. **[11-security-architecture.md](./docs/11-security-architecture.md)** — 10 min — IAM, tenant isolation, threat model
 9. **[12-slo-observability.md](./docs/12-slo-observability.md)** — 10 min — SLI/SLO, alerts, error taxonomy, replay
-10. **[08-operations.md](./docs/08-operations.md)** — 10 min — CI/CD, runbooks, risk register, DR
-11. **[09-engineering-judgment.md](./docs/09-engineering-judgment.md)** — 10 min — my closing argument
+10. **[17-architecture-truth-table.md](./docs/17-architecture-truth-table.md)** — 10 min — **the single most senior thing in this repo**: every claim mapped to implemented / demo / deferred with evidence paths
+11. **[08-operations.md](./docs/08-operations.md)** — 10 min — CI/CD, runbooks, risk register, DR
+12. **[09-engineering-judgment.md](./docs/09-engineering-judgment.md)** — 10 min — my closing argument
 
 The C and D briefs (04 + 05) are optional reading.
 
@@ -962,11 +964,12 @@ If you're skimming with a specific evaluator hat on:
 
 | If you're reviewing as a… | Hit these in order |
 |---|---|
-| **Senior Engineer** | 00 → 02 → 06 → 09 |
-| **Data Architect / Principal** | 01 → 10 → 02 → 07 → 03 |
-| **Security / Compliance** | 11 → 08 (CI/CD + risk register) → 10 (classification + retention) |
-| **SRE / Production Architect** | 12 → 08 → 02 (scale roadmap) → 07 |
-| **Engineering Manager** | 00 → 09 → 01 → 02 |
+| **Senior Engineer** | 00 → 02 → 06 → 17 → 09 |
+| **Data Architect / Principal** | 01 → 10 → 02 → 07 → 03 → 17 |
+| **Security / Compliance** | 17 → 11 → 08 (CI/CD + risk register) → 10 (classification + retention) |
+| **SRE / Production Architect** | 12 → 17 → 08 → 02 (scale roadmap) → 07 |
+| **Engineering Manager** | 00 → 09 → 17 → 01 → 02 |
+| **Adversarial reviewer auditing claim-vs-code** | **17 first** → drill into specific docs from there |
 
 ---
 

@@ -75,7 +75,7 @@ erDiagram
     }
 ```
 
-The eight entities (`Dealer`, `SourceDocument`, `SourceSection`, `Part`, `PartInstance`, `Fitment`, `VehicleModel`, `ImageAsset`, `ImageAssociation`, `PartAlias`, `IngestionPatternBinding`) cover every concept the brief implies plus the multi-OEM future the brief points at.
+The eleven entities (`Dealer`, `SourceDocument`, `SourceSection`, `Part`, `PartInstance`, `Fitment`, `VehicleModel`, `ImageAsset`, `ImageAssociation`, `PartAlias`, `IngestionPatternBinding`) cover every concept the brief implies plus the multi-OEM future the brief points at.
 
 ---
 
@@ -211,10 +211,12 @@ Every column belongs to a class. The class drives encryption, retention, access 
 | **P0 — Public catalog data** | `products.name_en`, `fitment` JSONB content, schematic images in R2 | Standard | All authenticated callers | Indefinite while dealer active |
 | **P1 — Dealer-supplied IP** | Raw dealer xlsx file (`source_file_sha256`), part_number lists | R2 with dealer-prefix isolation | Dealer + InventoryFlow ops | 7 years (regulatory) |
 | **P2 — Operational / audit** | `ingest_audit`, `ingest_runs`, LLM call records | Postgres | DataOps + on-call only | 2 years rolling |
-| **P3 — Supplier-confidential** | Cost prices, MOQ, supply contracts | (not in this submission scope) | Restricted via RLS | per-contract |
+| **P3 — Supplier-confidential commercial data** | `products.dealer_cost`, `products.retail_price` (already in the Solution A schema); future MOQ, supply contracts | Postgres with **column-level access policy** (see [`17-architecture-truth-table.md`](./17-architecture-truth-table.md)) | Dealer-admin + ops_admin; **not** exposed to marketplace_read role | per-contract; default 7 years |
 | **P4 — PII** | Dealer admin user identities, account contacts | (not in product schema; lives in IAM) | Restricted | per-GDPR / per-region |
 
-**No P3/P4 data is in the Solution A schema today.** This is deliberate — InventoryFlow's brief is parts catalog, not pricing or PII. When pricing / PII enters scope, both get separate tables + Postgres Row Level Security policies + per-tenant encryption keys.
+**Pricing fields (`dealer_cost`, `retail_price`) are classified P3 in this submission.** They exist in the Solution A schema today (migration `0000`) for demo coverage. **The column-level access policy that restricts them from the marketplace_read role is documented as a production target — deferred** in the truth table; in the demo, role separation isn't yet wired so any caller can read them. See [`17-architecture-truth-table.md`](./17-architecture-truth-table.md) for the explicit status. When real customer rollout begins, the access path is: drop `dealer_cost`+`retail_price` from the default `GET /api/products` projection; require an explicit `?include=pricing` flag with role-based authorisation; audit every access via `ingest_audit`.
+
+**P4 (true PII) is not in the product schema today.** When dealer admin user identities are added, they get separate tables + Postgres Row Level Security policies + per-tenant encryption keys.
 
 ---
 

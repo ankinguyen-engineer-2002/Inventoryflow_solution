@@ -2,6 +2,14 @@
 
 > The senior critique I anticipate: *"you mentioned WAF + TLS + secrets but where's the IAM model, where's the threat model, where's the supply-chain story?"* This document is that answer.
 
+> ⚠️ **Read this doc together with [`17-architecture-truth-table.md`](./17-architecture-truth-table.md).**
+> The architecture below describes the **target** security posture. Some
+> controls are implemented today; some are simulated for the take-home
+> demo; some are explicit production targets with triggers to un-defer.
+> The truth-table is the single source of "what's actually shipped vs
+> demo vs deferred". Wherever this document and the truth-table appear
+> to conflict, **the truth-table wins.**
+
 I treat security as five layers. Solution A ships fundamentals in each; the senior version of each layer is documented as deferred work with explicit triggers.
 
 ---
@@ -250,20 +258,36 @@ Each of these has a specific trigger. **None are appropriate to ship in the take
 
 ---
 
-## What concretely ships in Solution A's security posture
+## What concretely ships in Solution A's security posture today
 
-- ✅ Row Level Security on `products`, `product_images`, `ingest_audit`
-- ✅ JWT bearer token authentication + RBAC roles
-- ✅ TLS required on prod (1.2+ minimum)
-- ✅ Secrets via platform secret store, not in code
-- ✅ R2 default-private, signed-URL access only
-- ✅ `pnpm audit` and `pip-audit` in CI
-- ✅ Pinned Docker base image, pinned package versions
-- ✅ Cloudflare WAF + DNS in front of Fly.io
-- ✅ Pre-commit hook blocks accidental secret commits
-- ✅ Audit trail on `ingest_runs` + `ingest_audit`
+> See [`17-architecture-truth-table.md`](./17-architecture-truth-table.md) for the row-by-row status. Summary here:
 
-These are the controls a senior architect would write into the launch checklist. The aspirations above are documented as the year-1 work, not pretended to ship in the take-home.
+**Implemented (✅):**
+- Row Level Security on `products`, `product_images`, `stream_events`, `ingest_runs`, `dealer_pattern_bindings` (migration `0002`), and `ingest_audit` (migration `0006`)
+- Per-session tenant context via `SET LOCAL app.current_dealer_id` (migration `0002`)
+- `products.source_dealer_id NOT NULL` — no cross-tenant leak via NULL rows (migration `0006`)
+- Pinned Docker base image, pinned package versions (`pnpm-lock.yaml`, `poetry.lock`, image tags pinned)
+- SHA-pinned GitHub Actions in CI (`.github/workflows/ci.yml`)
+- `pnpm audit` and `pip-audit` steps in CI (advisory at PoC stage)
+- Trivy image scan in CI (advisory at PoC stage)
+- `.env` gitignored; only `.env.example` committed
+- Audit trail on `ingest_runs` + `ingest_audit` (per-dealer aggregation via the `dealer_id` column added in migration `0005`)
+
+**Demo for submission (🧪):**
+- Auth via `x-dealer-id` header (production target: JWT verify middleware — same plugin file)
+- R2 / MinIO returns public URLs (production target: signed URLs via S3-presign)
+- MinIO `mc anonymous set download` for local dev (production target: require credentials)
+
+**Production target — deferred (📐):**
+- Full RBAC role middleware (currently single-role)
+- TLS 1.2+ enforcement at the ingress (provider-level, deploy-time)
+- Platform secret store (Fly.io / Vault) with 90-day rotation
+- Cloudflare WAF custom rules
+- SOC 2 / ISO 27001 controls; pen-test; bug bounty
+- HSM-backed secret storage, CMEK
+- SIEM integration
+
+**The point of the trichotomy:** a senior reviewer can audit the security claim against the impl repo by row. Anything labelled implemented has code-path evidence; anything labelled demo has an explicit production target in the truth table; anything labelled deferred has a trigger condition. Nothing is pretended.
 
 ---
 

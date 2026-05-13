@@ -1,0 +1,27 @@
+{
+  "hardware": "darwin arm64",
+  "node_version": "v25.2.1",
+  "timestamp": "2026-05-13T11:15:53.857Z",
+  "fitment_query": {
+    "iterations": 1000,
+    "p50_ms": 0.61,
+    "p95_ms": 0.83,
+    "p99_ms": 1.07,
+    "max_ms": 3.16
+  },
+  "table_counts": {
+    "products": 3938,
+    "product_images": 10906,
+    "part_number_aliases": 50,
+    "vehicle_models": 65,
+    "reference_specs": 742,
+    "ingest_audit": 336,
+    "ingest_runs": 13,
+    "stream_events": 11,
+    "stream_outbox": 11,
+    "dealers": 2,
+    "ingestion_patterns": 3,
+    "dealer_pattern_bindings": 6
+  },
+  "jsonb_index_size_kb": 2128
+}
