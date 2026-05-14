@@ -1,3 +1,61 @@
+---
+type: solution-briefing
+project: InventoryFlow × Talemy take-home (Senior Engineer / Solution Architect)
+author: Aric Nguyen
+last_updated: 2026-05-15
+language: English (with VN context notes)
+voice: first-person, opinionated, senior consultant
+token_estimate: ~22k
+
+sections:
+  - { id: "§1",   title: "Context",                           anchor: "context" }
+  - { id: "§2",   title: "Decision framework",                anchor: "decision-framework" }
+  - { id: "§3",   title: "Solution A — recommended",          anchor: "solution-a", status: "recommended" }
+  - { id: "§4",   title: "Solution B — Iceberg lakehouse",    anchor: "solution-b", status: "migration-target" }
+  - { id: "§5",   title: "Solution C — Microsoft Fabric",     anchor: "solution-c", status: "enterprise-target" }
+  - { id: "§6",   title: "Solution D — AWS big-data",         anchor: "solution-d", status: "scale-target" }
+  - { id: "§7",   title: "LLM deep dive + measured results",  anchor: "llm-deep-dive" }
+  - { id: "§8",   title: "Accuracy verification (5 layers)",  anchor: "accuracy-verification" }
+  - { id: "§9",   title: "Implementation details",            anchor: "implementation" }
+  - { id: "§10",  title: "Security architecture",             anchor: "security" }
+  - { id: "§11",  title: "Operations & SLO",                  anchor: "operations" }
+  - { id: "§12",  title: "Cost claims tagged audit",          anchor: "cost-claims" }
+  - { id: "§13",  title: "Panel Q&A + pitch framing",         anchor: "panel-answers" }
+  - { id: "§14",  title: "Appendices",                        anchor: "appendices" }
+
+measured_results:
+  ocr_pipeline_1573_images:
+    phase_1_json_ok: "93.0% (1463/1573)"
+    phase_3a_layer3_high: "65.7% (1034/1573)"
+    phase_4_layer4_high: "42.9% (675/1573)"  # the defensible number
+    phase_4_swing_from_3a: "−22 percentage points (value Layer 4 adds)"
+    per_image_precision_ge_90: "62.4% (981/1573)"
+    per_sheet_union_coverage_100: "64.5% (69/107 sheets)"
+    db_integration: "verified live — 1573 rows in image_callouts"
+  track_a_vs_b_parity:
+    overall: "99.97% match on 3938 products"
+    track_b_correct_disagreements: 5  # 1 header + 4 encoding
+    track_a_correct_disagreements: 0
+    verdict: "Track B's stricter parser catches Track A bugs"
+
+senior_signals:
+  - "JSON validity ≠ Layer 3 clean ≠ content correctness vs ground truth (proven by 93% → 65.7% → 42.9% confidence walk)"
+  - "Two-track delivery is a verification mechanism, not redundant work"
+  - "LLM is a defect detector, not the translator of record (the policy decision)"
+  - "Cost discipline = $2.50 vs $2500/mo on cache decorator default-on"
+  - "Local 7B on M1 Max: $0 marginal, ~5h wall vs Claude Sonnet API: $25-32, ~30min"
+  - "Six quantified A→B migration triggers (not vibes)"
+  - "Architecture supports honest measurement; discipline is doing all the layers"
+
+ai_consumption_notes:
+  - "Each <section> tag wraps a self-contained chunk — AI can answer from one section without reading the rest"
+  - "<key_finding> tags mark the senior signals worth quoting verbatim"
+  - "Cross-references use → §X.Y notation"
+  - "Cost claims tagged [Verified|Likely|Need-verify|Speculation] per §0 zero-hallucination rule"
+  - "For Claude: instruct it to cite section IDs (§3.A.4) when answering"
+  - "For local 7B: section structure is enough; ignore XML tags if confused"
+---
+
 # InventoryFlow Solution Briefing — Master Reference
 
 > **PURPOSE**: Single-file comprehensive reference for the entire solution architecture. Designed for both human reading (skim → deep dive) and AI consumption (structured, chunked, scannable).
@@ -240,6 +298,8 @@ START
 ```
 
 ---
+
+<section id="solution-a" status="recommended" anchor="§3">
 
 ## §3 SOLUTION A — Postgres + JSONB + TS/Node (RECOMMENDED)
 
@@ -491,6 +551,10 @@ Full commands in impl repo README + ADR-002. The flow is intentionally boring �
 
 ---
 
+</section>
+
+<section id="solution-b" status="migration-target" anchor="§4">
+
 ## §4 SOLUTION B — Iceberg + Trino + Dagster + dbt + Polars
 
 ### 3.B.1 TL;DR
@@ -604,7 +668,9 @@ These need the source xlsx open in Excel to adjudicate. Either Track A is over-e
 
 **This is the senior architectural argument for having two tracks**: the second implementation isn't redundant work, it's a *verification mechanism*. Two independent parsers on the same input is exactly the cross-validation pattern from Layer 4 of the accuracy framework, applied at the system level.
 
+<key_finding id="track-parity-fidelity-improving" category="cross-validation">
 **Implication for ADR-009 (when to migrate to Track B)**: the migration is not just fidelity-preserving — at the limit of what parity tests can prove, it's **fidelity-improving**. The TypeScript parser has small bugs the Python parser doesn't. A → B is a re-platform with strict semantic-equivalence at 99.97%, and the gap is in favour of B.
+</key_finding>
 
 Committed evidence in impl repo: `sample-output/track-b/parity-report.json` + `sample-output/track-b/data/products-full.csv` for line-by-line diff against Track A's `sample-output/data/products-full.csv`.
 
@@ -618,6 +684,10 @@ Hetzner CX41 → docker-compose: postgres + minio + trino + dagster + caddy(TLS)
 Full compose file in `inventoryflow-catalog-ingest/track-b-data-engineering/`.
 
 ---
+
+</section>
+
+<section id="solution-c" status="enterprise-target" anchor="§5">
 
 ## §5 SOLUTION C — Microsoft Fabric
 
@@ -679,6 +749,10 @@ Compared to Solution A at 1 dealer (~$76/mo), Fabric F8 is **14× the cost floor
 Solution C is the one I'd propose to an enterprise customer with Microsoft estate. My CV signals 5+ years of Fabric / Power BI / Spark / dbt — relevant hire-ability evidence.
 
 ---
+
+</section>
+
+<section id="solution-d" status="scale-target" anchor="§6">
 
 ## §6 SOLUTION D — AWS big-data stack
 
@@ -745,6 +819,10 @@ Compare to Solution B at same scale: $0.50/dealer. AWS is ~5× more expensive �
 - IAM policies for cross-service access become a senior-engineer-day per service
 
 ---
+
+</section>
+
+<section id="llm-deep-dive" anchor="§7" topic="LLM strategy, cost discipline, measured timing">
 
 ## §7 LLM DEEP DIVE
 
@@ -1001,7 +1079,9 @@ SENIOR_SIGNAL:
 
 > *"For early-stage data startups, LLM is the most over-spent line item I see. The bill, on workloads I've measured personally, can be in the $300-3,000/month range when it should be in the $0-30 range. That's 10-100× overspend. The discipline isn't the model — it's the cache. A well-designed system costs ~$2.50/month for this workload. The same system with sloppy implementation costs $2,500/month. Hardware doesn't change; the model doesn't change; the prompt doesn't change. What changes is whether anyone bothered to write `cached(provider).translate(...)` instead of `provider.translate(...)` everywhere it counted."* `[claim: speculation - illustrative, not empirically sourced]`
 
+<key_finding id="cache-default-on-lever" category="cost-discipline">
 **The architectural lever**: cache decorator is **default-on** in Solution A. You have to actively turn it off to skip the cache. That single design choice is the difference between $2.50 and $2,500.
+</key_finding>
 
 ```yaml
 COST_PATHS_I'VE_SEEN_OVERSPEND:
@@ -1156,6 +1236,10 @@ The **same interface** allows:
 
 ---
 
+</section>
+
+<section id="accuracy-verification" anchor="§8" topic="5-layer accuracy framework, ground-truth cross-reference">
+
 ## §8 ACCURACY VERIFICATION (AI Engineer perspective)
 
 ### 8.1 Five-layer accuracy framework
@@ -1191,7 +1275,9 @@ Each disagreement is a candidate defect. Audit table records it. API decides:
 
 ### 8.3 Layer 4 — cross-source agreement (ensemble)
 
+<key_finding id="llm-is-defect-detector" category="policy-decision">
 **The policy decision that matters**: *the LLM is a defect detector, not the translator of record.*
+</key_finding>
 
 ```
 DEALER_INPUT: name_en = "fuel filter"
@@ -1268,7 +1354,9 @@ Each layer catches what the prior layer missed:
 - Layer 3 measures internal consistency (no duplicate_n, no pos hallucination)
 - Layer 4 measures content correctness vs external ground truth (parts_table)
 
+<key_finding id="layer-4-22pp-swing" category="measurement-discipline">
 The 22-percentage-point drop from 65.7% to 42.9% after Layer 4 is the **value Layer 4 adds**. Without it, we'd over-state quality by 22 percentage points. The 5-layer framework from `07-output-verification.md` is now empirically validated by this end-to-end run.
+</key_finding>
 
 **Per-sheet UNION coverage** (different metric — across all images per sheet, are all parts callout-mapped?):
 - 100% coverage: 69 / 107 sheets (64.5%)
@@ -1303,6 +1391,10 @@ The policy decision matters more than the model choice:
 - **Measure drift over time**: golden samples re-evaluated quarterly
 
 ---
+
+</section>
+
+<section id="implementation" anchor="§9" topic="schema, idempotency, CI/CD, Docker, observability">
 
 ## §9 IMPLEMENTATION DETAILS
 
@@ -1573,6 +1665,10 @@ RTO_TARGETS:
 
 ---
 
+</section>
+
+<section id="panel-answers" anchor="§13" topic="senior-voice answers to anticipated panel questions">
+
 ## §13 PANEL ANSWERS (anticipated questions)
 
 ### 13.1 "Why JSONB not normalized?"
@@ -1689,6 +1785,10 @@ The pattern: **numbers as anchors, judgment as content, story as throughline**. 
 
 ---
 
+</section>
+
+<section id="appendices" anchor="§14">
+
 ## §14 APPENDICES
 
 ### 14.1 File map (solution repo)
@@ -1795,10 +1895,12 @@ TOTAL_SECURITY_LAYERS: 5
 TOTAL_PANEL_QUESTIONS_ANSWERED: 6
 TOTAL_COST_CLAIMS_TAGGED: 22
 
-PRIMARY_OUTPUT_FORMAT: AI-friendly structured tables + YAML-like blocks
+PRIMARY_OUTPUT_FORMAT: AI-friendly structured tables + YAML-like blocks + minimal XML wrappers
 SECONDARY_OUTPUT_FORMAT: Human reading via TOC + anchors
 
-LAST_UPDATED: 2026-05-14
+LAST_UPDATED: 2026-05-15
 AUTHOR: Aric Nguyen
 ROLE: Senior Data Engineer / Solution Architect applicant for InventoryFlow × Talemy
 ```
+
+</section>
