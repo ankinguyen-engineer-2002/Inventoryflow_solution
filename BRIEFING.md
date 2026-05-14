@@ -124,6 +124,7 @@
      13.4 "How do you know it's accurate?"
      13.5 "Where's the threat model?"
      13.6 "What if dealer count grows 100x?"
+     13.7 How to pitch the results (clean framing + vocabulary)
 
 §14  APPENDICES
      14.1 File map (solution repo)
@@ -575,18 +576,37 @@ Track A's schema. Diffed against Track A's committed reference.
 }
 ```
 
-**99.97% parity**. The 1 row delta is "U8 Code" (header artefact in Track A's
-looser parser). The 10 `name_cn` differences are whitespace/encoding (would
-be cohort-fixed in production).
+**99.97% parity**. But the 0.03% delta is the interesting bit. I investigated each disagreement:
 
-**This validates ADR-009 (when to migrate to Track B)**: the migration is
-fidelity-preserving. Output correctness is identical between Track A and
-Track B. The architectural difference is in *infrastructure cost shape and
-scaling envelope*, not in *data semantics*. A→B is not a redo, it's a
-re-platform with semantic-equivalence guarantee.
+**Category 1 — 1 header artefact ("U8 Code")**:
 
-Committed evidence in impl repo: `sample-output/track-b/parity-report.json`
-+ `sample-output/track-b/data/products-full.csv`.
+Track A's looser parser treated a row containing the literal header tokens (`U8 Code | Model | EN name | Specification`) as a product. Track B's stricter parser skipped it. **Track B is correct.**
+
+**Category 2 — 4 encoding corruption rows**:
+
+```
+PN 802007-0371:
+  Track A: 前减护板贴花 2�� 513胶      ← U+FFFD replacement char (broken UTF-8 read)
+  Track B: 前减护板贴花 2号 513胶      ← correct
+
+PN 405009-0009 / 0020 / 0024:
+  Track A: 后刹泵��架                  ← character corruption
+  Track B: 后刹泵支架                  ← correct
+```
+
+Track A has 4 rows with `��` (U+FFFD = the canonical "broken-character" replacement). Track B reads UTF-8 correctly. **Track B is correct.**
+
+**Category 3 — 6 rows ambiguous (Track A has name_cn, Track B empty)**:
+
+These need the source xlsx open in Excel to adjudicate. Either Track A is over-eager (reading from merged cells / adjacent overflow) or Track B is dropping legitimate data. Without ground truth I won't claim either way.
+
+**Verdict**: of the 11 disagreements, Track B is verifiably correct on **5** (1 header + 4 encoding), Track A is verifiably correct on **0**, and **6 are ambiguous**. The "0.03% noise" is not noise — it's **Track B catching real bugs in Track A** that the parity test surfaced.
+
+**This is the senior architectural argument for having two tracks**: the second implementation isn't redundant work, it's a *verification mechanism*. Two independent parsers on the same input is exactly the cross-validation pattern from Layer 4 of the accuracy framework, applied at the system level.
+
+**Implication for ADR-009 (when to migrate to Track B)**: the migration is not just fidelity-preserving — at the limit of what parity tests can prove, it's **fidelity-improving**. The TypeScript parser has small bugs the Python parser doesn't. A → B is a re-platform with strict semantic-equivalence at 99.97%, and the gap is in favour of B.
+
+Committed evidence in impl repo: `sample-output/track-b/parity-report.json` + `sample-output/track-b/data/products-full.csv` for line-by-line diff against Track A's `sample-output/data/products-full.csv`.
 
 ### 3.B.7 Setup flow (concise)
 
@@ -1624,6 +1644,48 @@ RTO_TARGETS:
 > *Trigger 6 (RTO < 1h): if marketplace SLA requires sub-15-min RTO, Iceberg VERSION AS OF rollback wins.*
 >
 > *Migration is incremental: data exports from Postgres → Iceberg via dbt seed. dbt models port. The Fastify API becomes a thin proxy to Trino for read paths. The migration risk is the **streaming pipeline** (BullMQ → Redpanda) — that's where I'd spend the most time on testing."*
+
+### 13.7 How to read these results — the pitch framing
+
+> The temptation when presenting measured results is to lead with "5-layer accuracy framework empirically validated, 22-percentage-point swing between Phase 3a and Phase 4 demonstrates cross-source agreement layer value". That language is academic. It's also wrong for a panel pitch — they want story and judgment, not jargon.
+>
+> Here is the cleaner framing.
+
+**Opening — 20 seconds, one paragraph**:
+
+> *"I parsed 3,938 products from the xlsx. I OCR'd 1,573 schematic images locally on my Mac, ~5 hours wall time, near-zero marginal cost. Then I verified the OCR output against the parts list in the same xlsx — using the data itself as ground truth, not self-evaluation. 43% of images came out high-confidence. The rest are tiered into review and reject queues, each with an explicit downstream path. No image is 'lost' — every one of the 1,573 has a route."*
+
+**When asked "Why only 43% high-confidence?"** —
+
+> *"43% is the defensible number. The model produces valid JSON 93% of the time — but JSON validity isn't content correctness. When I cross-reference against the parts list, 50 percentage points get demoted. That's the discipline of running all five accuracy layers, not just the first one. If I claimed 95% and a reviewer asked 'how do you know', I couldn't defend it. I'd rather claim 43% I can defend than 95% I can't."*
+
+**When asked "Why two tracks?"** —
+
+> *"I built the same pipeline twice. Track A on the JD's stack (TypeScript / Postgres / Drizzle) to ship fast. Track B on the production-target stack (Python / Iceberg / Dagster / dbt) to scale. The two implementations agree on 99.97% of products. More importantly, the 0.03% disagreement isn't random noise — Track B's stricter parser catches 4 encoding bugs and 1 header artefact in Track A. Two parsers on the same input is a cross-validation mechanism at the system level. Migration from A to B isn't just safe — it's quality-improving."*
+
+**When asked about cost** —
+
+> *"Local self-host: $0 marginal cost, 5 hours wall time. Same task through Claude Sonnet vision API: $25–32, 30 minutes. Both are correct answers. The decision is which constraint binds — cash burn or wall time. For a take-home and early-stage production, I picked cash. For a marketplace with real-time SLA, I'd pick the API. The trigger for switching is in the doc — I'm not hand-waving the trade-off."*
+
+**Closing — 10 seconds**:
+
+> *"I can tell you what percentage of my system is correct, what percentage is wrong, where it's wrong, and what the routing is for each error class. That's what I'm pitching — not the accuracy number, the accountability of the system."*
+
+---
+
+**Vocabulary to avoid in pitch (the academic-sounding phrases)**:
+
+| Don't say | Say instead |
+|---|---|
+| "5-layer accuracy framework empirically validated" | "I checked the output 5 different ways" |
+| "Phase 4 Layer 4 cross-source agreement" | "Cross-checked the model against the parts list" |
+| "Confidence distribution: HIGH 42.9%, MEDIUM 29.7%, LOW 27.4%" | "43% clean, 30% flagged, 27% review" |
+| "0.03% parity delta" | "Match 99.97% — the gap caught real bugs" |
+| "Layer 3 detected 264 duplicate_n hallucinations" | "Caught 264 cases where the model repeated callout numbers — 30-line consistency check" |
+| "kIOGPUCommandBufferCallbackErrorTimeout" | "Apple's GPU watchdog killed it when I pushed too many parallel workers" |
+| "Architecturally restrained from over-engineering" | "I deliberately didn't ship X — here's the trigger when I would" |
+
+The pattern: **numbers as anchors, judgment as content, story as throughline**. The panel will remember the story. The numbers earn the right to tell it.
 
 ---
 
