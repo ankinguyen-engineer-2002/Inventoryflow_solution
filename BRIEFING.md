@@ -363,15 +363,16 @@ ACTUAL_TIMING_ON_M1_MAX_64GB:
   KNOWN_QUIRK: 1 in 3 workers dies with kIOGPUCommandBufferCallbackErrorTimeout
               every 30-60 min when worker hits a "heavy" image (busy schematic)
 
-PHASE_PIPELINE (all 3 phases shipped, measured numbers below):
+PHASE_PIPELINE (all 5 stages shipped + verified live in DB, measured numbers below):
   PHASE_1_OCR:           7B on all 1573 images → 1463 OK (93.0%), 110 fail
-  PHASE_2_REFINEMENT:    Anti-loop retry (max_tokens=512, temp=0.3, stricter prompt)
-                         on 110 fails → 39 recovered (35.5%), 71 still fail
-  PHASE_3A_VERIFY:       Layer 3 consistency check + confidence tier assignment
-                         HIGH 65.7% / MEDIUM 25.9% / LOW 3.8% / DEAD 4.5%
-                         Ship-ready (HIGH+MEDIUM): 1442/1573 (91.6%)
-  PHASE_3B_INTEGRATE:    Upsert into image_callouts table with confidence
-                         (--dry-run verified end-to-end on 1573 rows)
+  PHASE_2_REFINEMENT:    Anti-loop retry on 110 fails → 39 recovered (35.5%)
+  PHASE_3A_LAYER3:       Internal consistency check (duplicate_n, pos hallucination)
+                         Demoted 264 records from naive "Phase 1 OK"
+  PHASE_4_LAYER4:        Ground-truth cross-reference vs parts_table xlsx
+                         Per-image precision + per-sheet union coverage
+                         Demoted 359 more records (the value Layer 4 adds)
+  PHASE_5_DB_INTEGRATE:  1573 rows upserted into image_callouts via psycopg
+                         Live verified: HIGH 42.9% / MEDIUM 29.7% / LOW 27.4%
 ```
 
 ### 3.A.7 Multi-tenancy + RLS
@@ -779,7 +780,7 @@ CACHE_DESIGN:
 | 100k-1M | Self-host 7B on GPU box ($200/mo) | $200-400 |
 | >1M | Cluster + light fine-tuning + ensemble | $500-2000 |
 
-### 7.7 Real timing data — 1573 images (MEASURED, complete run)
+### 7.7 Real timing data — 1573 images (MEASURED, complete 5-stage run)
 
 ```yaml
 ACTUAL_RUN_2026_05_14:
@@ -789,10 +790,10 @@ ACTUAL_RUN_2026_05_14:
                    kv_bits=4, kv_group_size=64
 
 PHASE_1_TIMINGS (3 workers parallel):
-  W0 (slice 0/3): 525 images, wall 102.5 min, avg 24.3 s/img → 235 OK + 18 fail
-  W1 (slice 1/3): 304 images, wall 125.8 min, avg 24.8 s/img → 282 OK + 22 fail
-  W2 (slice 2/3): 250 images (alone after 2 deaths), avg 25.0 s/img → 236 OK + 14 fail
-  Total Phase 1:  1573 / 1573 (100%), 1463 OK (93.0%), 110 fail
+  W0 (slice 0/3): 525 imgs, wall 102.5 min, avg 24.3 s/img → 235 OK + 18 fail
+  W1 (slice 1/3): 304 imgs, wall 125.8 min, avg 24.8 s/img → 282 OK + 22 fail
+  W2 (slice 2/3): 250 imgs (alone after 2 deaths), avg 25.0 s/img → 236 OK + 14 fail
+  Total Phase 1:  1573/1573 (100%), 1463 OK (93.0%), 110 fail
   Wall (overlap): ~4-5 hours
 
 PHASE_2_TIMINGS (1 worker, anti-loop config):
@@ -801,25 +802,53 @@ PHASE_2_TIMINGS (1 worker, anti-loop config):
   Recovery: 39 / 110 (35.5%)
   Wall: 25.9 min
 
-PHASE_3A_TIMINGS (pure Python verification):
-  Layer 3 consistency check + confidence tier assignment
+PHASE_3A_TIMINGS (Layer 3 consistency, pure Python):
+  Detected 264 duplicate_n, 51 pos_hallucination, 39 invalid_pos, 34 empty_list
   Wall: <1 minute on 1573 records
 
-FINAL_CONFIDENCE_DISTRIBUTION:
-  HIGH:     1034 / 1573 (65.7%)  — Phase 1 OK, no Layer 3 warnings, ≥3 callouts
-  MEDIUM:    408 / 1573 (25.9%)  — Phase 2 recovered OR Phase 1 OK + 1 warning
-  LOW:        60 / 1573 (3.8%)   — multiple Layer 3 violations
-  DEAD:       71 / 1573 (4.5%)   — both phases failed → parts_table fallback
-  SHIP_READY: 1442 / 1573 (91.6%) HIGH + MEDIUM
+PHASE_4_TIMINGS (Layer 4 ground-truth cross-reference):
+  Read parts_table from xlsx (242 MB, ~30s)
+  Per-image precision + per-sheet union coverage computed
+  Wall: ~1 minute on 1573 records + 110 sheets
 
-LAYER_3_FINDINGS:
-  264 images had duplicate `n` (content hallucination — JSON valid but lying)
+DB_INTEGRATION_TIMINGS (psycopg upsert):
+  1573 rows into image_callouts table via ON CONFLICT
+  Wall: <30 seconds
+
+FINAL_CONFIDENCE_DISTRIBUTION (in image_callouts table, verified live):
+  HIGH:    675 / 1573 (42.9%)  — Phase 1 OK + Layer 3 clean + precision ≥90%
+  MEDIUM:  467 / 1573 (29.7%)  — Phase 2 recovered OR precision 70-90%
+  LOW:     431 / 1573 (27.4%)  — precision <70% + 71 DEAD-mapped-to-LOW
+  TOTAL:   1573 / 1573 (100%)
+
+PHASE_4_PRECISION_DISTRIBUTION (per-image, vs parts_table ground truth):
+  ≥90%:    981 / 1573 (62.4%)  — almost all callouts real
+  70-90%:  171 / 1573 (10.9%)  — minor hallucination
+  <70%:    313 / 1573 (19.9%)  — significant hallucination
+  0%:        3 / 1573 (0.2%)   — all callouts hallucinated
+  no_truth: 105 / 1573 (6.7%)  — text-only sheets (TABLE OF CONTENTS etc.)
+
+PHASE_4_PER_SHEET_UNION_COVERAGE:
+  100% coverage:  69 / 107 sheets (64.5%)
+  ≥70% coverage:  91 / 107 sheets (85.0%)
+  0% coverage:    5 sheets (text-only specs without schematic diagrams)
+
+LAYER_3_FINDINGS (Phase 3a):
+  264 images had duplicate_n (content hallucination, JSON valid but lying)
   51  images had pos_hallucination (≥90% callouts assigned same position)
-  39  images had invalid_pos values (non-enum)
+  39  images had invalid_pos (non-enum pos value)
   34  images had empty_list
-  Key insight: Phase 1 reported 93% JSON parse OK, but Layer 3 demoted 264
-  of those to MEDIUM tier because the content was hallucinated. JSON validity
-  ≠ content correctness.
+
+LAYER_4_FINDINGS (Phase 4):
+  359 more records demoted HIGH → MEDIUM/LOW after cross-reference
+  HIGH confidence dropped from 65.7% (Phase 3a) → 42.9% (Phase 4)
+  This 22-percentage-point swing is the value Layer 4 adds
+
+THE_SENIOR_INSIGHT:
+  Phase 1 OK rate (93%) measures JSON validity. Phase 3a (65.7% HIGH)
+  adds Layer 3 consistency. Phase 4 (42.9% HIGH) adds ground-truth
+  cross-reference. Each layer catches what the prior layer missed.
+  Without Layer 4, we'd over-state quality by 22 percentage points.
 
 COST:
   Marginal: $0 (electricity ~$1 over ~5h)
@@ -1166,18 +1195,33 @@ WHAT_HAPPENS:
   - 'info' → metric only
 ```
 
-### 8.6 Confidence tiering (with measured 1573-image distribution)
+### 8.6 Confidence tiering (with measured 1573-image distribution, post-Layer 4)
 
 | Tier | Trigger | Downstream behavior | Measured % |
 |---|---|---|---|
-| HIGH | Phase 1 OK, no Layer 3 warnings, ≥3 callouts | Default API projection | **65.7% (1034)** |
-| MEDIUM | Phase 2 recovered, OR Phase 1 OK with 1 Layer 3 warning | Surface with audit flag | **25.9% (408)** |
-| LOW | Multiple Layer 3 violations (duplicate_n, pos_hallucination, etc.) | Hide from marketplace; ops review queue | **3.8% (60)** |
-| DEAD | Both Phase 1 + Phase 2 OCR failed | Fallback to parts_table for callout numbers (no spatial position) | **4.5% (71)** |
+| HIGH | Phase 1 OK + Layer 3 clean + precision ≥90% vs parts_table | Default API projection | **42.9% (675)** |
+| MEDIUM | Phase 2 recovered OR precision 70-90% (demoted from HIGH) | Surface with audit flag | **29.7% (467)** |
+| LOW | Layer 3 violations OR precision <70% (hallucinated callouts) | Hide from marketplace; ops review queue | **27.4% (431, includes 71 DEAD-mapped-to-LOW)** |
 
-**Ship-ready (HIGH + MEDIUM): 1442 / 1573 = 91.6%**.
+**The honest measurement story**:
 
-The 264-image gap between "Phase 1 JSON parse OK" (93%) and "HIGH confidence" (65.7%) is the value Layer 3 adds: it catches hallucinated content that's syntactically valid JSON. Without Phase 3a, we'd have claimed 93% high-confidence and been wrong about ~17% of those.
+| Step | "HIGH confidence" claim | Reality at that step |
+|---|---|---|
+| After Phase 1 (JSON parse OK only) | 93.0% (1463/1573) | But 264 had `duplicate_n` content hallucination |
+| After Phase 3a (Layer 3 consistency) | 65.7% (1034/1573) | But 359 had hallucinated callout NUMBERS vs ground truth |
+| After Phase 4 (Layer 4 ground truth) | **42.9% (675/1573)** | This is the defensible number |
+
+Each layer catches what the prior layer missed:
+- Phase 1 measures syntactic validity (JSON parses)
+- Layer 3 measures internal consistency (no duplicate_n, no pos hallucination)
+- Layer 4 measures content correctness vs external ground truth (parts_table)
+
+The 22-percentage-point drop from 65.7% to 42.9% after Layer 4 is the **value Layer 4 adds**. Without it, we'd over-state quality by 22 percentage points. The 5-layer framework from `07-output-verification.md` is now empirically validated by this end-to-end run.
+
+**Per-sheet UNION coverage** (different metric — across all images per sheet, are all parts callout-mapped?):
+- 100% coverage: 69 / 107 sheets (64.5%)
+- ≥70% coverage: 91 / 107 sheets (85.0%)
+- 0% coverage: 5 sheets (TABLE OF CONTENTS, Carburetor Jets, etc. — text-only sheets without schematic diagrams, expected)
 
 ### 8.7 Manual sampling cadence
 
