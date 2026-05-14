@@ -78,6 +78,12 @@
      7.9  max_tokens tuning
      7.10 Resize cap (1024px) — why
      7.11 Classical OCR preprocessing — why I skipped
+     7.12 Cost discipline — the architectural lever ($2.50 vs $2,500)
+     7.13 Fine-tuning vs prompt engineering vs cache
+     7.14 Pure OCR alternative — why it loses for this workload
+     7.15 Lessons from local self-host (5 production implications)
+     7.16 My single most important paragraph (the policy decision)
+     7.17 Provider abstraction (the interface)
 
 §8   ACCURACY VERIFICATION (AI Engineer perspective)
      8.1  Five-layer accuracy framework
@@ -469,36 +475,14 @@ TRADE_5: Local LLM costs 4-5 hours wall time per 1573-image batch
                     production, the wall time is acceptable. Production scale → API.
 ```
 
-### 3.A.12 Setup runbook (concrete)
+### 3.A.12 Setup flow (concise)
 
-```bash
-# 1. Clone + bootstrap
-git clone https://github.com/ankinguyen-engineer-2002/inventoryflow-catalog-ingest
-cd inventoryflow-catalog-ingest/track-a-jd-native
-cp .env.example .env
-
-# 2. Start local stack
-docker-compose up -d              # Postgres + Redis + MinIO
-pnpm install
-pnpm migrate                       # Apply 6 migrations in order
-
-# 3. Seed MDCP
-pnpm seed                          # 1 demo dealer + 3 pattern bindings
-
-# 4. Run ingest on sample xlsx
-pnpm ingest:full ./sample.xlsx
-
-# 5. Verify
-pnpm query                         # Sample fitment lookup
-pnpm bench                         # Performance benchmark on M1 Max
-
-# 6. Vision OCR (optional, 4-5h on M1 Max)
-cd ../shared/vision-mlx
-source .venv/bin/activate
-for i in 0 1 2; do
-  python batch_vision_ocr.py --slice $i/3 > batch_w$i.log 2>&1 &
-done
 ```
+clone → docker-compose up → pnpm install → migrate (6 migrations) → seed MDCP
+      → pnpm ingest:full <xlsx> → pnpm query → pnpm bench → (optional) MLX vision OCR
+```
+
+Full commands in impl repo README + ADR-002. The flow is intentionally boring — no exotic deployment tooling, just JD-stack defaults.
 
 ---
 
@@ -568,18 +552,14 @@ INGEST → Redpanda topic → Dagster asset (bronze) → dbt model (silver) → 
 4. Migration is cheaper than rewrite: A→B is a real path, not a redo
 ```
 
-### 3.B.7 Setup runbook
+### 3.B.7 Setup flow (concise)
 
-```bash
-# Self-host on Hetzner CX41 (~€15/mo)
-- Single VM with Docker Compose
-- Services: postgres (catalog DB), minio (S3-compat), trino, dagster-daemon, dagster-webserver
-- iceberg-catalog: Postgres-backed (uses same Postgres instance)
-- Reverse proxy: Caddy with auto-TLS
-
-# Track B repo has the full docker-compose at:
-inventoryflow-catalog-ingest/track-b-data-engineering/
 ```
+Hetzner CX41 → docker-compose: postgres + minio + trino + dagster + caddy(TLS)
+            → dbt models → iceberg catalog (Postgres-backed) → Trino query
+```
+
+Full compose file in `inventoryflow-catalog-ingest/track-b-data-engineering/`.
 
 ---
 
@@ -903,6 +883,165 @@ SENIOR_SIGNAL:
   "AI sophistication" would actively hurt quality.
 ```
 
+### 7.12 Cost discipline — the architectural lever
+
+`The single most important LLM-cost argument I make`:
+
+> *"For early-stage data startups, LLM is the most over-spent line item I see. The bill, on workloads I've measured personally, can be in the $300-3,000/month range when it should be in the $0-30 range. That's 10-100× overspend. The discipline isn't the model — it's the cache. A well-designed system costs ~$2.50/month for this workload. The same system with sloppy implementation costs $2,500/month. Hardware doesn't change; the model doesn't change; the prompt doesn't change. What changes is whether anyone bothered to write `cached(provider).translate(...)` instead of `provider.translate(...)` everywhere it counted."* `[claim: speculation - illustrative, not empirically sourced]`
+
+**The architectural lever**: cache decorator is **default-on** in Solution A. You have to actively turn it off to skip the cache. That single design choice is the difference between $2.50 and $2,500.
+
+```yaml
+COST_PATHS_I'VE_SEEN_OVERSPEND:
+  - No caching: every call hits paid API
+  - Cache without provider abstraction: can't swap to cheaper provider
+  - No batch API: paying real-time rates for batch workload
+  - No deduplication: same Chinese term translated N times across products
+  - Audit mode running on every record (instead of sampled): 2× the API cost
+  - "Quality assurance" calls that the cache already handled
+
+COST_PATHS_DISCIPLINED_IMPLEMENTATIONS_USE:
+  - Cache decorator default-on → 99% hit rate steady state
+  - Global deduplication on Chinese term → 10-100× fewer unique calls
+  - Provider abstraction: dev=mock, staging=cached+mock, prod=cached+anthropic-batch
+  - Batch API where latency tolerates it (50% off Anthropic) [verified rate]
+  - Audit mode sampled at 1-5%, not 100%
+```
+
+### 7.13 Fine-tuning vs prompt engineering vs cache
+
+A separate question I get in interviews:
+
+| Lever | When to apply | $/run | Time-to-effect |
+|---|---|---|---|
+| **Prompt engineering** | Always — first move | $0 | Hours |
+| **Cache (this submission's lever)** | High repetition of identical inputs | $0 | Hours |
+| **Fine-tuning** | After cache + prompts maxed out, AND you have ground-truth labels | $50-500 one-shot | Days-weeks |
+| **Switch model class** | Quality ceiling reached on current model | Depends | Hours |
+| **Ensemble (2 providers)** | Critical-quality workload where disagreement = defect | 2× per call | Hours |
+| **Self-host fine-tune** | >100k/month + domain divergence from internet text | GPU box $200/mo | Weeks |
+
+**My order of operations for InventoryFlow**:
+1. Prompt engineering first (zero-cost, sets the floor)
+2. Cache default-on (1-2 days, 10-100× cost lever)
+3. Audit mode for quality measurement (1 week)
+4. Ensemble if disagreement-rate matters (1-2 weeks)
+5. Fine-tuning only if all above maxed out (1+ months, requires labeled corpus)
+
+`Fine-tuning is the wrong first move 90% of the time. Most "we need to fine-tune" conversations resolve when someone fixes the prompt.`
+
+### 7.14 Pure OCR alternative (option 4 from my matrix)
+
+**Why pure OCR is tempting**: $0 marginal cost. OSS tooling (Tesseract, PaddleOCR, EasyOCR). No LLM hallucination concerns. Deterministic.
+
+**Why I think it usually loses for this workload**:
+
+```yaml
+TESSERACT:
+  PROS:  $0, 30 years of engineering, deterministic
+  CONS:  Brittle on bilingual content; requires extensive preprocessing
+         (threshold/morpho/denoise pipeline I rejected in §7.11);
+         poor at unstructured text (callout labels embedded in line art);
+         no semantic understanding (can't tell "1" from "I" without context)
+
+PADDLEOCR:
+  PROS:  Strong on Chinese; modern (CNN+CTC); $0; ONNX-exportable
+  CONS:  Same preprocessing requirements as Tesseract;
+         struggles with callout-label discrimination from drawing lines;
+         no "what does this part name mean" semantic layer
+
+EASYOCR:
+  PROS:  Best out-of-box multilingual; pip install and go
+  CONS:  Slower than PaddleOCR; same line-art confusion;
+         output quality varies widely with image preprocessing
+
+MISTRAL_OCR (paid managed):
+  PROS:  Modern transformer OCR; handles layout reasonably
+  CONS:  ~$0.001/page, breaks the $0-marginal-cost goal for self-host;
+         still no semantic understanding of part naming
+```
+
+**What I'd actually use** (if forced to OCR-only):
+- **PaddleOCR for Chinese text in parts table** (paid xlsx already extracts this, but if PDF input: PaddleOCR > Tesseract)
+- **Qwen2.5-VL for schematic callout extraction** (VLM beats classical OCR on numbered diagrams)
+- **Hybrid**: PaddleOCR for parts-table column rows, Qwen-VL for schematic spatial OCR
+
+The reason Qwen-VL wins for schematic OCR specifically: it has **vision-language joint training**. It doesn't just read "1" — it knows "1" is in the top-left near the cylinder, which is the structural signal a downstream API needs.
+
+### 7.15 Lessons from local self-host (production design implications)
+
+The MLX run produced **empirical evidence** for design choices I'd otherwise have to defend with vibes:
+
+**Lesson 1 — Model composition beats single-model picks**
+
+Initially tested 2B-4bit alone. It was fast (10s/img) but **undercounted callouts** by 37% on busy schematics (verified against 7B output). The fix wasn't tuning the prompt — it was **switching model class**. 7B-8bit's quality improvement justified its 3× latency.
+
+> *"For high-recall tasks (catalog OCR), small models that look fast in benchmarks fail silently in production. Recall is harder to measure than throughput; senior engineers measure it anyway."*
+
+**Lesson 2 — GPU contention is the real ceiling on Apple Silicon, not RAM**
+
+RAM stayed at ~26 GB total for 3 workers (out of 64). Plenty of headroom. But **GPU command-buffer time** is the bottleneck: 3 workers + heavy image → 1 worker dies with `kIOGPUCommandBufferCallbackErrorTimeout`. Pattern: 1 in 3 workers dies every 30-60 min.
+
+> *"For Apple-Silicon self-host, the cost model is GPU-time per image, not RAM per worker. Plan for occasional restarts via `--resume` idempotent script."*
+
+**Lesson 3 — Prompt engineering for small models (the 2B story)**
+
+The 2B model had **56% JSON parse failure** on initial run because my prompt used `|` separator ("one of: a | b | c"). The 2B model treated `|` as literal text and included it in output, breaking JSON. Fixed by replacing with enumeration ("one of: a, b, c") + concrete example. Failure rate dropped to 13%.
+
+> *"Small models need explicit, concrete prompt structure. The same prompt that works on 7B (which infers structure) fails on 2B (which copies literally). Test prompts on the smallest model in your fallback chain."*
+
+**Lesson 4 — Cost economics is the architectural lever, not the model choice**
+
+Running 7B locally for 1573 images: **$1 of electricity, 4-5 hours wall time**.
+Same task via Claude Sonnet 4.6 vision: **$25-32, 30 min**.
+
+Both are correct answers. The decision is which axis to optimize: cash burn (early-stage) vs wall time (real-time SLA).
+
+> *"Don't optimize on quality alone. The architectural choice is which constraint binds: $$, time, or quality. Solution A picks cash. A production rollout with marketplace SLA would pick time and pay the API."*
+
+**Lesson 5 — Production hardening I'd add beyond the take-home**
+
+```yaml
+LESSON_5_PRODUCTION_TODO:
+  - OTLP exporter to Tempo/Honeycomb (not just SDK instrumented)
+  - Severity-routed alerts (sev-1 PagerDuty, sev-2 Slack, sev-3 Linear)
+  - Synthetic checks on fitment-lookup p99 latency every 60s
+  - Chaos test: kill 1 worker mid-batch, verify --resume picks up cleanly
+  - Cost-budget alarm: 24h LLM spend > 3× rolling-7d → page
+  - Drift detection: re-run golden sample monthly, alert on >5% delta
+  - Cohort review tooling: `pnpm audit --cohort <term>` for systemic disagreements
+```
+
+### 7.16 My single most important paragraph
+
+`The policy decision that distinguishes a senior data engineer from a junior calling APIs and hoping`:
+
+> *"The LLM is a defect detector, not the translator of record. That's the policy decision that matters. The dealer's translation goes to `name_en`. The LLM's goes to `name_en_llm` with a `data_quality` score. Disagreements get an `audit_status` flag. Marketplace-bound rows escalate to human review. Cohort patterns trigger a single prompt/rule fix instead of 100 individual reviews.*
+>
+> *That's the discipline. It's not 'my model is 95% accurate.' It's 'I have a 5-layer accuracy framework, an escalation path for failures, drift detection over time, and the LLM is in the supporting role.'*
+>
+> *Cache discipline is the cost lever. Audit discipline is the quality lever. The LLM provider is the **commodity** — swap one for another in 20 lines of code via the abstraction. The discipline is what compounds."*
+
+### 7.17 Provider abstraction (the interface that makes the above possible)
+
+```typescript
+interface ILLMProvider {
+  translate(input: TranslateInput): Promise<TranslateOutput>
+  describe(input: ImageInput): Promise<DescribeOutput>
+  // Each implementation: mock, cached, ollama, anthropic-batch, gemini, claude-code-handoff
+}
+
+const provider = cached(anthropicBatch(opts))  // composable decorator pattern
+```
+
+The **same interface** allows:
+- Unit tests with `mock`
+- Local dev with `cached(claudeCodeHandoff)` (zero API cost via Claude Max subscription)
+- Production with `cached(anthropicBatch)` (50% discount via batch API)
+- Audit mode with `ensemble(cached(anthropicBatch), cached(gemini))` (disagreement detection)
+
+> *"Swapping providers is 1 line of config. Adding the cache is 1 line of code. Adding ensemble is 5 lines. The interface is what compounds — once you have it, the entire LLM strategy is composable. Without it, every LLM call is a hardcoded pet."*
+
 ---
 
 ## §8 ACCURACY VERIFICATION (AI Engineer perspective)
@@ -1112,60 +1251,29 @@ LAYER_4_LLM: cache key = SHA-256(model_id + prompt + input_hash)
   - Tenant-scoped policy joining ingest_runs.dealer_id
 ```
 
-### 9.4 CI/CD pipeline
+### 9.4 CI/CD flow (concise)
 
-```yaml
-TRIGGERS:
-  - PR opened/synchronized
-  - Push to main
-
-JOBS:
-  lint_and_typecheck:
-    - pnpm typecheck (strict TS)
-    - pnpm lint (ESLint)
-  tests:
-    - postgres + redis service containers
-    - pnpm migrate
-    - pnpm test (Vitest)
-  bench:
-    - pnpm bench → bench-results.json
-    - gate: p99 fitment query < 5ms
-  security:
-    - pnpm audit --prod --audit-level high (advisory in PoC)
-    - pip-audit on Track B requirements.txt
-    - trivy image scan (advisory)
-  build:
-    - docker build with NODE_DIGEST pinning pattern
-    - all uses: pinned by commit SHA (not tags)
+```
+PR → lint+typecheck → tests (with postgres+redis) → bench (gate: p99<5ms)
+   → security (pnpm audit, pip-audit, trivy — advisory) → docker build (digest-pin)
+   → merge to main
 ```
 
-### 9.5 Docker setup
+All GitHub Actions SHA-pinned per `tj-actions/changed-files` 2025 incident lesson. Audit/Trivy advisory until triage rotation exists, then fail-on-high.
 
-```yaml
-DOCKERFILE_BASE:
-  FROM node:22-alpine@sha256:<digest>  # pinned via NODE_DIGEST build arg
+### 9.5 Docker (concise)
 
-DOCKER_COMPOSE (local dev):
-  postgres: postgres:16-alpine@sha256:<digest>
-  redis: redis:7-alpine
-  minio: quay.io/minio/minio:RELEASE.2025-XX-XX  # pinned version, NOT latest
-  mc: quay.io/minio/mc:RELEASE.2025-XX-XX        # pinned version
-```
+- Base: `node:22-alpine@sha256:<digest>` via `NODE_DIGEST` build arg
+- Compose: postgres+redis+minio+mc all pinned by digest (no `:latest`)
 
-### 9.6 Observability instrumentation
+### 9.6 Observability (concise)
 
-```yaml
-LOGS:        Pino structured JSON with run_id correlation
-TRACES:      OpenTelemetry SDK instrumented at major span boundaries
-METRICS:     Prometheus /metrics endpoint (env-flag enabled)
-AUDIT:       ingest_audit row per LLM call with cost, latency, cache_hit, agreement
-RUN_REGISTRY: ingest_runs lifecycle states (pending → running → succeeded/failed)
-ERROR_TAXONOMY:
-  - SCHEMA_VIOLATION (Layer 1)
-  - DOMAIN_RULE_VIOLATION (Layer 2)
-  - CROSS_ROW_INCONSISTENT (Layer 3)
-  - LLM_DISAGREEMENT (Layer 4)
-```
+- **Logs**: Pino structured JSON, `run_id` correlation
+- **Traces**: OpenTelemetry SDK at major span boundaries
+- **Metrics**: Prometheus `/metrics` (env-flag enabled)
+- **Audit**: `ingest_audit` row per LLM call (cost, latency, cache_hit, agreement)
+- **Runs**: `ingest_runs` lifecycle (pending → running → succeeded/failed)
+- **Errors**: 4 categories matching accuracy layers (Schema / Domain / Cross-row / LLM-disagree)
 
 ---
 
