@@ -829,3 +829,479 @@ I have judgment under constraints. Solution A is the JD-native shipping-fast ans
 I work in cross-border async by default. 3 years of Vietnam-to-Vietnam-US-EU collaboration including the current 91% compatibility outcome at Ashley with US HQ technical reviewers. The collaboration mode this role needs is the mode I'm already in.
 
 What I bring: 4 years of full-lifecycle data engineering (Fabric, Azure, Iceberg, dbt, streaming, AI tooling), senior-architect-track ownership of decisions and ADRs, cost-discipline thinking applied to LLM and infrastructure, and honest reporting of what I shipped vs what I deferred. What I want: a role where I own architectural decisions, where AI tooling is core, and where the team trusts engineering judgment. If those align, I'd like to be your hire.
+
+---
+
+# Section 19 — Opinion-seeking questions (industry views + technical takes)
+
+Format for sections 19-21: each question includes **TL;DR** (1-2 sentence direct answer to lead with), **Flow** (bullet outline for the full answer), **Numbers to drop** (specific facts that anchor credibility), and where relevant **Pushback signal** / **Trap to avoid**.
+
+## Q19.1 — "What do you think of Microsoft Fabric overall?"
+
+**TL;DR**: Fabric is the right answer for enterprises with existing M365 spend and Power BI as primary consumer — Direct Lake + capacity-unit model works at enterprise scale. For startups and mid-market, F2 floor at $262/mo plus fixed-cost capacity makes it economically painful. I work with it daily at Ashley; it's solid but I wouldn't recommend it to a 5-person team.
+
+**Flow**:
+- Acknowledge expertise upfront (daily at Ashley, DP-700 certified, 91% pattern compatibility with US HQ)
+- Strengths: Direct Lake serving, OneLake zero-copy shortcuts, integrated platform, Power BI native, Purview governance
+- Weaknesses: capacity-unit pricing pays even idle, F2 floor blocks early-stage, Direct Lake row-count limits, M365 lock-in
+- Honest middle position: great for enterprise, bad for early-stage; depends on customer's existing Microsoft estate
+
+**Numbers to drop**: F2 ~$262/mo, F8 ~$1,050/mo, 91% pattern compatibility with US HQ, DP-700 certified.
+
+**Trap to avoid**: Don't blindly praise (lose credibility) or trash (have domain expertise). Honest middle wins.
+
+---
+
+## Q19.2 — "What's your take on the current AI/LLM hype?"
+
+**TL;DR**: The technology is real but deployment patterns are immature. 80% of teams use LLMs without cache discipline, without provider abstraction, without audit mode — and overspend by 10-100×. The senior signal isn't "use AI for everything," it's "use AI as a defect detector, not a translator of record, with cache default-on."
+
+**Flow**:
+- Technology genuinely improved 10× since 2023
+- Deployment immaturity: most teams skip cache, skip provider abstraction, skip audit, skip ensemble
+- My position: LLMs are tools with specific architectural role — defect detector + acceleration layer
+- NOT a source of truth, NOT replacement for human-curated data, NOT deployed without measurable accuracy framework
+- Cost discipline is the architectural difference between $30/mo and $3000/mo on same workload
+
+**Numbers to drop**: 10-100× overspend pattern, 99% cache hit rate at steady state, 5-layer accuracy framework, $2.50 vs $2,500/mo cache lever.
+
+**Trap to avoid**: Don't sound anti-AI or pro-AI extreme. Senior nuance: "useful tool with specific deployment patterns."
+
+---
+
+## Q19.3 — "Do you think LLMs will replace data engineers?"
+
+**TL;DR**: No, but LLMs will replace specific tasks data engineers spend time on — boilerplate DAX, SQL scaffolding, documentation drafts, code reviews of obvious bugs. The role shifts toward judgment, architecture, ground-truth verification, and cohort-level diagnosis — exactly the senior signals this take-home tests for.
+
+**Flow**:
+- Tasks LLMs are taking over: boilerplate code, doc drafts, simple SQL, DAX scaffolding
+- Tasks LLMs aren't taking over: architectural judgment, trade-off discussions, ground-truth verification, cohort-level diagnosis, customer conversations
+- Concrete example: built MCP-based AI for DAX generation at Ecentric → analysts faster on simple measures, but senior analysts still review and own complex DAX
+- Role evolution: less typing, more judging
+- Senior data engineers in 2026+ are LLM-augmented, not LLM-replaced
+
+**Numbers to drop**: MCP-based AI at Ecentric, ~60% faster time-to-measure on simple DAX, complex DAX still human-owned.
+
+**Trap to avoid**: Don't be defensive about job security. Frame as evolution.
+
+---
+
+## Q19.4 — "What's your opinion on JSONB vs dedicated document databases like MongoDB?"
+
+**TL;DR**: Postgres JSONB plus GIN gives document-store performance for query workloads AND keeps ACID, RLS, generated columns, and mature tooling. MongoDB is the right choice when the whole domain is document-shaped without relational properties; for InventoryFlow's multi-shape data model JSONB plus normalized canonical plus analytics wide, Postgres wins on flexibility.
+
+**Flow**:
+- Bench evidence: p99 0.99ms on M1 Max for fitment query via JSONB + GIN jsonb_path_ops
+- What I keep with Postgres: ACID across products + product_images + fitment, RLS multi-tenancy, mature tooling (Drizzle, pgAdmin, dbt), generated columns
+- What I'd give up with MongoDB: cross-collection ACID, RLS, dbt integration, and the three-shape pattern (since MongoDB doesn't do normalized well)
+- When MongoDB does win: domain is purely document-shaped (CMS, user profiles with deeply nested config), no relational queries needed
+- The senior signal: pick by access pattern, not by buzz
+
+**Numbers to drop**: 0.99ms p99 fitment query, 3-shape data model, GIN jsonb_path_ops index choice.
+
+**Trap to avoid**: Don't dismiss MongoDB as bad. It's good for specific patterns; Postgres is better for InventoryFlow.
+
+---
+
+## Q19.5 — "Where do you see data engineering going in 5 years?"
+
+**TL;DR**: Three trends — (1) the OSS lakehouse stack consolidates (Iceberg becoming the format winner, dbt as transformation lingua franca, Polars/DuckDB as in-memory standard), (2) AI-augmented data work shifts toward verification and cohort-level diagnosis rather than translation, (3) cross-border async data teams become the norm because the work concentrates in writing-first artifacts.
+
+**Flow**:
+- Trend 1 — OSS lakehouse consolidation: Iceberg winning format wars over Delta + Hudi, dbt as universal transformation framework, Polars/DuckDB replacing Pandas for medium-data
+- Trend 2 — AI shifts data engineer role: less translation/scaffolding work, more verification (the 5-layer accuracy framework becomes standard practice), more cohort-level diagnosis
+- Trend 3 — Async distributed teams: data work is writing-heavy (SQL, dbt, docs), translates well to cross-border setups; salary arbitrage real for senior talent in mid-tier markets
+- The pattern I'm betting on: senior data engineers who own architectural decisions across these trends will be 3× more valuable than narrow specialists
+
+**Numbers to drop**: Iceberg in Track B of this submission, dbt models in both tracks, Polars for in-memory at Track B, 99.97% parity proves the OSS stack matches commercial output.
+
+**Trap to avoid**: Don't sound like a Gartner report. Anchor predictions in concrete tools you've used.
+
+---
+
+## Q19.6 — "What's a controversial opinion you hold about data architecture?"
+
+**TL;DR**: Vector databases are over-deployed. Most "semantic search" needs are actually exact attribute matching plus a thesaurus — and JSONB with GIN does that in <1ms. The number of teams running Pinecone for queries that should be SQL is large. Vector DBs are useful for specific patterns (image similarity, semantic embedding over unstructured text); they're not the default tool for "anything search-related."
+
+**Flow**:
+- The opinion: vector DBs are over-deployed for non-semantic queries
+- The example: "find products like X" — often means "find products with similar attributes (year, model, category)," which is structured query, not similarity
+- JSONB + GIN does this in <1ms; vector DB adds infrastructure + cost + complexity for no benefit
+- Where vector DBs do win: image-to-image similarity, semantic text embedding (RAG over unstructured docs), recommendation systems with embedding models
+- The senior pattern: ask "what's the actual query?" before reaching for the trendy tool
+
+**Pushback signal**: "I'd push back on default-vector-DB thinking — what's the actual query pattern?"
+
+**Numbers to drop**: 0.99ms p99 JSONB query, GIN jsonb_path_ops index, structured query class vs semantic similarity class.
+
+**Trap to avoid**: Don't trash vector DBs categorically. Be specific about where they're misapplied.
+
+---
+
+# Section 20 — Comparison-trap questions (depth tests dressed as suggestions)
+
+These are questions where the interviewer suggests an alternative approach to see if you really understand the trade-offs. The trap is taking the bait — agreeing or disagreeing without engaging the underlying question.
+
+## Q20.1 — "Wouldn't Snowflake be simpler than this multi-stack setup?"
+
+**TL;DR**: Snowflake is fine for the analytics shape but it's not a serving database — marketplace queries need <2ms p99 on JSONB fitment, which is Postgres territory. Snowflake floor is $200-400/mo at small scale; Solution A is $76/mo at 1 dealer. The scale where Snowflake's simplicity pays off (>1000 dealers, analytics-heavy) is past the InventoryFlow brief.
+
+**Flow**:
+- The trap: assuming Snowflake replaces both OLTP and OLAP
+- Snowflake is a warehouse — bad at OLTP (slow per-row, no transactional updates, eventually-consistent)
+- InventoryFlow needs OLTP (marketplace catalog upserts, RLS, idempotent inserts) plus analytics
+- Cost floor: Snowflake credits + warehouse + storage = $200-400/mo minimum at small scale
+- Solution A at $76/mo wins at early stage
+- At 1000+ dealers, Snowflake makes sense for analytics shape — same role as Iceberg in Solution B
+- The senior signal: pick the right tool for the access pattern, not "one tool for everything"
+
+**Pushback signal**: "Snowflake is a warehouse, not a serving DB — the simplicity argument doesn't apply to the marketplace hot path. What's the access pattern you're optimising for?"
+
+**Numbers to drop**: $76/mo Solution A vs $200-400/mo Snowflake floor, 2ms p99 serving requirement, OLTP-vs-OLAP distinction.
+
+---
+
+## Q20.2 — "Postgres can't scale. Why not Cassandra from day 1?"
+
+**TL;DR**: Postgres scales fine for InventoryFlow — single-instance handles 50-100 files/day comfortably, replicas handle reads, sharding by dealer_id handles further growth. Cassandra trades consistency for partition tolerance, but InventoryFlow needs ACID for product upserts + fitment + audit. Cassandra would force eventual consistency in a domain where consistency matters.
+
+**Flow**:
+- The trap: "scale" is one-dimensional in the question
+- Postgres bench: p99 0.99ms, idempotent upserts, RLS, mature replication
+- The 6 migration triggers are specific: not "Postgres can't scale," but "specific triggers for specific scaling problems"
+- Cassandra trade-off: AP system (availability + partition tolerance) at cost of consistency
+- InventoryFlow needs consistency: dealer uploads xlsx, must reflect immediately (read-your-write semantics)
+- At >10k dealers + multi-region, Cassandra or Spanner becomes interesting — past every documented trigger
+- CAP theorem isn't optional — pick the right side for the access pattern
+
+**Pushback signal**: "The 'Postgres can't scale' claim is too coarse — what scaling axis specifically? Bench shows p99 0.99ms on the fitment hot path."
+
+**Numbers to drop**: 6 quantified migration triggers, 0.99ms p99 bench, dealer_id sharding pattern.
+
+---
+
+## Q20.3 — "Why didn't you use a vector database for the fitment search?"
+
+**TL;DR**: Vector databases serve semantic similarity search (find products like X) — not exact attribute matching (find products where year=2024 AND model_code='AT125-B'). Fitment search is exact lookup on structured fields, which is what JSONB plus GIN does in <1ms. Adding a vector DB would solve a different problem.
+
+**Flow**:
+- The wrong premise: vector DB ≠ structured query tool
+- Vector DBs (Pinecone, Weaviate, pgvector) solve "semantic similarity" — embedding-based nearest neighbour
+- Fitment query: `find products where fitment array contains {year=2024, model_code='AT125-B'}` — that's exact match, not similarity
+- JSONB + GIN does this in <1ms p99
+- Vector DB would add infrastructure + complexity + cost for zero benefit on this query class
+- Vector DBs would help for: "find products similar to this description text" — different access pattern, not in InventoryFlow brief
+
+**Pushback signal**: "I'd push back on the premise — vector DBs serve semantic similarity, but fitment search is exact structured query. JSONB plus GIN is the right tool. Is there a similarity query I'm missing in the use case?"
+
+**Numbers to drop**: 0.99ms p99 GIN query, 256-bit SHA-256 entropy for image keys.
+
+---
+
+## Q20.4 — "Couldn't you just use ChatGPT for everything in this take-home?"
+
+**TL;DR**: ChatGPT-for-everything fails on three counts — cost discipline (no cache abstraction means $100s/month for what should be $5), accuracy verification (no 5-layer framework, hallucinations go undetected), and architectural defensibility (panel asks "how do you know it works?" and the answer can't be "ChatGPT said so"). The senior signal is treating LLMs as a defect detector with cache, audit, and ground-truth cross-reference.
+
+**Flow**:
+- The wrong premise: "simpler" doesn't mean "more senior"
+- Cost: no cache abstraction = 10-100× overspend on the same workload
+- Quality: no Layer 4 ground-truth check = silent hallucination going to marketplace
+- Defensibility: panel asks "how do you know?" — "ChatGPT was confident" isn't an answer
+- The senior approach: LLM is a defect detector (audit mode), not the source of truth (dealer data wins)
+- Cache decorator default-on, provider abstraction allows swapping mock/local/paid, 5-layer framework measures content correctness independently
+
+**Pushback signal**: "I think the question conflates 'use AI' with 'don't have engineering discipline.' Using ChatGPT without cache, audit, and ground-truth cross-reference is the cheapest way to ship a wrong system. The discipline is what compounds."
+
+**Numbers to drop**: 42.9% HIGH after Layer 4 (vs 93% Phase 1 OK = naive over-claim), 22pp swing showing Layer 4's value, $2.50 vs $2,500/mo cache lever.
+
+---
+
+## Q20.5 — "Iceberg is overkill for 3,938 products. Use BigQuery."
+
+**TL;DR**: Iceberg is the format choice for Track B (the migration target), not the format for Track A (the current submission). Track A uses Postgres because the JD names Postgres. At 3,938 products today, no analytics format is needed — Iceberg is documented as the answer for when scaling triggers fire (>500 dealers, >50 TB historical). BigQuery would be locked into Google Cloud and similar trade-offs to Snowflake.
+
+**Flow**:
+- Trap: assuming I picked Iceberg for current scale (I didn't — Track A is Postgres)
+- Track B with Iceberg is the migration target, with documented triggers
+- BigQuery substitution: locked into GCP, cost floor at small scale, similar OLTP gap to Snowflake
+- The decision tree explicitly handles this: Solution B for self-host OSS, Solution C for Microsoft, Solution D for AWS — equivalent trade-offs
+- Track B exists not to ship today but to demonstrate the migration is real (99.97% parser parity validates this)
+
+**Pushback signal**: "Iceberg is the Track B migration target, not Track A. The 3,938 products today live in Postgres for serving. Iceberg ships when the scaling triggers fire."
+
+**Numbers to drop**: 99.97% parity between Track A (Postgres) and Track B (Iceberg) on the same xlsx parse, 6 quantified migration triggers, $0.023/GB-mo S3 storage rate for Iceberg.
+
+---
+
+## Q20.6 — "Why didn't you just use Drizzle's built-in JSON validation instead of Zod?"
+
+**TL;DR**: Drizzle's column type system gives me TypeScript types at compile time; Zod gives me runtime validation of inputs from outside the type system (xlsx parser output, API request bodies, LLM responses). Both are needed — Drizzle for typed query construction, Zod for runtime gate at I/O boundaries. They're complementary, not competing.
+
+**Flow**:
+- Trap: assuming Drizzle and Zod overlap
+- Drizzle: typed query builder + migrations + schema inference at compile time
+- Zod: runtime validation of unknown-shape inputs at I/O boundaries
+- Concrete example: dealer uploads xlsx → parser produces ParsedProduct → Zod validates structure before DB write
+- Without Zod: bad xlsx data could pass TypeScript checks but fail at DB CHECK constraints
+- The senior pattern: compile-time types AND runtime validation are different problems; both shipped
+
+**Pushback signal**: "Drizzle and Zod aren't substitutes — they solve different problems. Drizzle gives me typed query construction; Zod validates runtime inputs from outside the type system."
+
+**Numbers to drop**: Zod schema for FitmentEntry + ProductRow validation, Drizzle schema for 12-entity Postgres model.
+
+---
+
+## Q20.7 — "Wouldn't you get better OCR accuracy by training a custom model?"
+
+**TL;DR**: For a take-home with 1,573 images and no labeled dataset, training a custom model is impossible — there's no ground truth to fine-tune against. Even with labels, fine-tuning at this scale is the wrong order of operations. The lever order is: prompt → cache → audit → ensemble → fine-tune. Most "we need fine-tuning" conversations resolve at prompt engineering.
+
+**Flow**:
+- The wrong premise: assuming fine-tuning is always available or the right first move
+- Practical block: no labeled corpus for 1,573 images (would need 100+ labeled samples per category)
+- Order of operations: prompt first (free, hours) → cache default-on (free, hours) → audit (free, week) → ensemble (free, weeks) → fine-tune (paid, months)
+- Concrete evidence: 2B model failed at 56% JSON parse → fixed prompt (replaced `|` with enumeration) → failure dropped to 13%. Same model, no fine-tuning.
+- Fine-tune justification: 100k+ calls/mo + domain divergence from internet + labeled corpus
+
+**Pushback signal**: "I'd push back here — fine-tuning needs labeled data we don't have, plus it's typically the wrong first lever. Order of operations is prompt-first; we get more value from prompt + cache than fine-tuning would provide at this scale."
+
+**Numbers to drop**: 56% → 13% parse failure on prompt fix alone, 1,573 images without ground-truth labels, fine-tune threshold 100k+ calls/mo.
+
+---
+
+# Section 21 — Deliberately-wrong premise questions (pushback tests)
+
+These questions contain a factually wrong premise. The interviewer wants to see if you'll politely correct rather than agree to be agreeable. The senior signal is professional pushback with evidence — never timid agreement.
+
+## Q21.1 — "Since Postgres RLS doesn't scale to thousands of policies, you should use API-level filtering."
+
+**TL;DR**: The premise is wrong — Postgres RLS does scale to thousands of policies; per-policy overhead is sub-millisecond on simple equality clauses. The actual question is API-level vs DB-level filtering. API-level filtering is fail-OPEN (one missing WHERE clause = breach). RLS is fail-CLOSED (default-deny). I want the fail-closed pattern at the DB layer with API-level filtering as defense-in-depth.
+
+**Flow**:
+- The wrong premise: assuming RLS has a hard scale ceiling
+- Reality: RLS adds sub-ms overhead on simple policies; scales fine to thousands
+- API-level filtering failure mode: developer forgets `WHERE dealer_id = ?` on one endpoint → cross-tenant leak
+- RLS failure mode: application forgets `SET LOCAL` → query returns nothing (default-deny)
+- Which is preferable? Default-deny. RLS is fail-safe.
+- Senior pattern: defense in depth — RLS at DB + JWT verification at API + signed URLs at object storage. Each layer fails safe.
+
+**Pushback signal**: "I'd disagree on this — RLS is fail-safe (default-deny) while API-level filtering is fail-open (one missing WHERE clause = breach). RLS scales fine for InventoryFlow's policy complexity. It's defense in depth alongside API-level checks, not a replacement for them."
+
+**Numbers to drop**: RLS on 6 tables in Solution A, sub-ms policy overhead, 3-layer defense-in-depth (DB + API + object storage).
+
+---
+
+## Q21.2 — "JSONB queries are slow — that's why everyone uses Mongo for catalog data."
+
+**TL;DR**: Wrong premise. JSONB queries with GIN jsonb_path_ops are sub-millisecond on M1 Max bench (p99 0.99ms for the fitment hot path). The claim "everyone uses Mongo" is also empirically false — major catalogs (Shopify, Stripe, Square) run on Postgres. The senior signal is engaging with measurement, not folklore.
+
+**Flow**:
+- The wrong premise: JSONB is slow AND "everyone uses Mongo"
+- Bench evidence: p99 0.99ms on fitment query, GIN jsonb_path_ops index
+- "Everyone uses Mongo" is false: Shopify (Postgres), Stripe (Postgres), Square (Postgres), GitLab (Postgres) — all run JSONB-heavy catalogs on Postgres
+- The pattern that matters: pick by access pattern + tooling, not by buzz
+- For InventoryFlow's multi-shape data model, Postgres wins because of ACID across products+images+audit + RLS + dbt integration
+
+**Pushback signal**: "I'd push back on both claims here. JSONB with GIN is sub-millisecond — bench shows p99 0.99ms on the fitment hot path. And catalog-on-Postgres is the dominant pattern at scale (Shopify, Stripe, Square). What's the specific access pattern that you're worried about?"
+
+**Numbers to drop**: 0.99ms p99 bench, GIN jsonb_path_ops index, JSONB-on-Postgres usage at Shopify/Stripe/Square scale.
+
+---
+
+## Q21.3 — "You should have used GraphQL instead of REST for the marketplace API."
+
+**TL;DR**: GraphQL is a tool for client-driven query shaping, not a default API style. For InventoryFlow's catalog where queries are well-known and shape-stable ("find products by vehicle"), REST is simpler, cacheable, and easier to rate-limit. GraphQL would add complexity (N+1 risk, deeper query attack surface) for benefit that doesn't exist in this use case.
+
+**Flow**:
+- The trap: assuming GraphQL is always better
+- GraphQL wins when: clients have varying query shapes, mobile/web/IoT need different field subsets, schema-driven introspection matters
+- REST wins when: queries are stable, caching is critical, rate-limiting is per-endpoint, HTTP semantics map cleanly
+- InventoryFlow marketplace catalog: stable queries (fitment lookup, product detail, image fetch), HTTP caching critical (CDN), per-endpoint rate limits
+- GraphQL risks: N+1 query patterns require DataLoader-level discipline, deep nested queries are DoS attack surface, response shape is harder to cache
+
+**Pushback signal**: "GraphQL would solve client-driven query shaping, but InventoryFlow's catalog queries are stable and benefit from HTTP caching. I'd push back unless there's a specific multi-shape client need I'm missing."
+
+**Numbers to drop**: Solution A REST endpoints (/api/products, /api/images), Fastify built-in caching, Cloudflare CDN integration.
+
+---
+
+## Q21.4 — "Since you're using TypeScript, why not also write the Track B in TypeScript? Then you'd have one language."
+
+**TL;DR**: Wrong premise — "one language" isn't an architectural goal. Track B uses Python because the production-target stack (Polars, Dagster, dbt) is Python-native. Forcing TypeScript on Track B would mean reimplementing Polars/Dagster/dbt equivalents (which don't exist or are worse). The senior pattern is: pick the right language per layer, not one language for everything.
+
+**Flow**:
+- The trap: "one language" treated as a virtue
+- Track A in TypeScript: matches JD-named stack (Fastify, Drizzle), strict types, runtime Zod
+- Track B in Python: Polars (Rust-backed, Python API), Dagster (Python DAG framework), dbt (Python wrapper around SQL)
+- TypeScript Track B alternatives don't exist at parity: pandas-equivalent in TS is missing, Dagster has no TS port, dbt-core is Python
+- "One language" is junior optimization (developer comfort); "right language per layer" is senior optimization (tool fit)
+
+**Pushback signal**: "I'd push back on 'one language' as a goal. Track B is Python because Polars + Dagster + dbt are Python-native — those are the production-target tools. Forcing TypeScript would mean reimplementing inferior alternatives."
+
+**Numbers to drop**: Polars perf wins over Pandas, Dagster asset-based DSL pattern, 99.97% parity validates Python-vs-TypeScript output equivalence.
+
+---
+
+## Q21.5 — "Your '5-layer accuracy framework' is over-engineering for a take-home. Just use JSON parse success."
+
+**TL;DR**: The wrong premise: thinking the 5-layer framework is for the take-home, when it's actually the result of catching real defects. Phase 1 JSON parse rate was 93% (the "just JSON parse success" answer). Phase 3a Layer 3 caught 264 internal-consistency violations. Phase 4 Layer 4 caught 359 hallucinated callout numbers. Without all 5 layers, the quality claim is over-stated by 22+ percentage points.
+
+**Flow**:
+- The wrong premise: 5-layer is academic
+- The reality: each layer caught real defects the prior layer missed
+- Phase 1 alone would have claimed 93% quality — wrong by 22pp
+- Phase 3a alone caught duplicate_n (264 images); without it, those records would be marketed as HIGH
+- Phase 4 alone caught hallucinated callout numbers (359 images); without it, those records would have shipped to marketplace
+- The framework is the discipline; without discipline, the system over-claims confidence
+
+**Pushback signal**: "I'd push back here — the framework caught real defects. Phase 1 JSON success was 93%, but 264 of those had duplicate_n hallucinations and 359 had invented callout numbers. Without Layer 3 and Layer 4, we'd claim 93% quality and be wrong by 22 percentage points."
+
+**Numbers to drop**: 93% → 65.7% → 42.9% confidence walk-down, 264 duplicate_n caught by Layer 3, 359 hallucinated by Layer 4, 22pp swing.
+
+---
+
+## Q21.6 — "Two tracks is redundant work. You should have spent that time polishing Track A."
+
+**TL;DR**: Two tracks isn't redundant — it's a cross-validation mechanism at the system level. The 99.97% parity test between Track A (TypeScript) and Track B (Python) caught 5 verifiable bugs in Track A: 1 header artifact misparsed as product, and 4 rows with U+FFFD character corruption from broken UTF-8 read. Without Track B, those bugs would have shipped to production silently. This is exactly the Layer 4 cross-source agreement pattern applied at infrastructure level.
+
+**Flow**:
+- The wrong premise: two tracks = wasted effort
+- Reality: two tracks = independent verification mechanism
+- Bug catches: 5 Track A bugs caught by Track B (1 header artifact + 4 encoding bugs)
+- Track B caught zero bugs that Track A also missed (asymmetric — Track B is more correct on disagreements)
+- The pattern: same as Layer 4 of accuracy framework — cross-source agreement detects defects
+- ADR-009 migration A→B is now provably fidelity-preserving (99.97% match) AND fidelity-improving (5 bugs fixed)
+
+**Pushback signal**: "I'd disagree on redundant — two tracks is cross-validation. Track B caught 5 bugs in Track A (1 header artifact, 4 encoding errors) that would have shipped silently. Same pattern as Layer 4 of the accuracy framework, applied to infrastructure."
+
+**Numbers to drop**: 99.97% parity, 5 Track A bugs caught, 0 Track B bugs (asymmetric), ADR-009 migration validation.
+
+---
+
+## Q21.7 — "Local OCR is too slow for production — 5 hours for 1,573 images is unacceptable."
+
+**TL;DR**: 5 hours for 1,573 images is the take-home wall time on a developer laptop, not the production wall time. At production scale (>10k images/day), the architecture shifts to either cloud GPU (5 minutes on H100 cluster) or paid API (30 minutes parallel via Anthropic batch). The 5-hour number is the cash-discipline trade-off for the submission, with explicit triggers for when to switch.
+
+**Flow**:
+- The wrong premise: take-home wall time = production constraint
+- Take-home decision: $0 marginal cost vs $25-32 API cost, 5h wall vs 30min wall
+- Production decision triggers (documented): >10k images/day OR marketplace SLA <5min OR LLM cost share <30% of bill
+- Migration path: same parser, swap provider in 1 line of config (LLM provider abstraction)
+- The senior pattern: pick the constraint that binds (cash for take-home, time for production)
+
+**Pushback signal**: "The 5-hour number is the take-home wall time at $0 marginal cost. Production at >10k images/day flips to cloud GPU or paid API — 30-minute wall, ~$2-30 per batch. The trigger for the switch is documented. What's the production scale you're thinking about?"
+
+**Numbers to drop**: $0 marginal local vs $25-32 paid API for 1,573 images, 5h vs 30min wall time, provider abstraction allows 1-line swap.
+
+---
+
+## Q21.8 — "You're a data engineer, not a software engineer — why are you applying for Senior Engineer?"
+
+**TL;DR**: Wrong dichotomy. The Senior Engineer / Solution Architect role at InventoryFlow tests stack discipline (TypeScript/Postgres/Drizzle), data modeling judgment (JSONB tri-shape), AI tooling discretion, and migration-path thinking. Those are data engineering muscles applied through software engineering. My CV shows 4 years of full-lifecycle work — APIs, services, CI/CD, type systems, semantic models — not just SQL. The InventoryFlow submission is a working pipeline with REST API, BullMQ workers, Drizzle migrations, RLS, and tested code, not a Jupyter notebook.
+
+**Flow**:
+- The wrong premise: data engineer ≠ software engineer
+- My CV: 4 years building production data platforms with full-stack work (REST APIs, services, CI/CD, type-safe code, semantic models, MCP-based AI)
+- This take-home: shipped TypeScript with Fastify, Drizzle migrations, Zod validation, BullMQ workers, RLS, tests, CI workflow — that IS software engineering
+- The InventoryFlow brief tests senior judgment across both fields: data architecture AND software engineering discipline
+- Senior data engineers in 2026 are full-stack; the title gap is industry shorthand, not a capability gap
+
+**Pushback signal**: "I'd push back on the dichotomy. The InventoryFlow submission ships TypeScript with Fastify, Drizzle migrations, BullMQ workers, RLS, and CI tests — that's software engineering. The data engineering experience adds judgment about data modeling and pipelines on top. Both are needed for this role."
+
+**Numbers to drop**: 4 years experience, 91% pattern compatibility at Ashley, 18 ADRs in solution repo, two-track submission with parity test, 1,573 images in DB live.
+
+---
+
+## Q21.9 — "Cluely / RAG retrieval is unreliable. Just paste the whole document into ChatGPT each time."
+
+**TL;DR**: Wrong premise — RAG and full-context loading are different patterns for different file sizes and use cases. For a 22k-token briefing file like BRIEFING.md, full-context loading works fine on Claude (200k window) or GPT-4o (128k). For a 1M-token knowledge base across 50 documents, full-context loading exceeds even Claude Opus's 1M window. RAG is the right pattern at scale, full-context is right at small scale. The choice is per-deployment, not per-tool.
+
+**Flow**:
+- The wrong premise: RAG vs full-context is a quality question
+- Reality: it's a scale question
+- Full-context wins at <100k tokens — model sees everything, no retrieval failure modes
+- RAG wins at >100k tokens — full-context exceeds windows, chunks become necessary
+- BRIEFING.md at 22k tokens: full-context works on Claude/GPT/Gemini
+- BRIEFING-RAG.md exists because Cluely uses RAG by default — even small files get chunked
+- The senior pattern: optimise file format for the deployment target (XML for Claude API direct, plain markdown for RAG systems)
+
+**Pushback signal**: "RAG and full-context are different patterns for different scales. At 22k tokens like BRIEFING.md, full-context works fine. At 1M tokens across many docs, RAG is necessary because full-context exceeds windows. The choice is per-deployment."
+
+**Numbers to drop**: 22k tokens BRIEFING.md, 200k Claude Sonnet window, 1M Claude Opus window, 128k GPT-4o window, Cluely Enterprise 1M tokens.
+
+---
+
+## Q21.10 — "Your salary expectation of $3.5-5k NET is high for Vietnam local market."
+
+**TL;DR**: Wrong frame — I'm not pricing for Vietnam local market. I'm pricing for cross-border senior engineering, which is the work I've been doing at Ashley (US-HQ-aligned) and what this Talemy role explicitly is. The $3.5-5k NET range is established for cross-border senior data engineer roles in Vietnam, validated by VietnamWorks and LinkedIn Vietnam salary data, with concrete evidence of cross-border competence (91% pattern compatibility with US HQ at Ashley).
+
+**Flow**:
+- The wrong premise: pricing me on Vietnam local market
+- Reality: cross-border senior roles have established compensation bands above local
+- The work: APAC-to-US HQ alignment, ADR ownership, architectural decisions — not local IC work
+- Evidence of competence: 91% pattern compatibility with US HQ technical reviewers (Ashley)
+- Market data: VietnamWorks + LinkedIn Vietnam salary surveys, cross-border senior band $3.5-5k NET
+- The negotiation frame: this is the band for the work; I'm not anchoring on local market
+
+**Pushback signal**: "The range I quoted is for cross-border senior engineering, not Vietnam local. The work is US-HQ-aligned architectural ownership, which has an established band. Concrete evidence is the 91% pattern compatibility outcome at Ashley with US HQ reviewers."
+
+**Numbers to drop**: $3,500-5,000 USD NET range, 91% compatibility evidence, VietnamWorks + LinkedIn data, cross-border premium over local.
+
+---
+
+# Section 22 — Meta-pattern reminders
+
+These are the meta-patterns that should anchor any answer, regardless of which question is asked.
+
+## Pattern A — Lead with the answer, then the reasoning
+
+Every question gets a 1-2 sentence TL;DR first, then the supporting structure. Panel attention is highest in the first 5 seconds — that's when the answer needs to land. Reasoning supports the answer; reasoning is not the answer.
+
+## Pattern B — Numbers are anchors, judgment is content
+
+Cite specific numbers — 99.97% parity, 22pp swing, 1573 images, $0.99ms p99 — because they earn the right to make judgment claims. But don't lead with numbers as the answer; lead with the judgment, anchored by the numbers.
+
+## Pattern C — Honest is always better than impressive
+
+If the defensible number is 42.9% HIGH confidence after Layer 4, claim 42.9% — not 93% Phase 1 OK. Senior panels can tell the difference between a candidate selling a number and a candidate who can defend a number.
+
+## Pattern D — Pushback on wrong premises professionally
+
+When the question contains a wrong premise, surface it politely rather than agreeing to be agreeable. Format: "I'd push back on this — [reason]. The actual question is [reframe]. What's the specific [thing] you're worried about?"
+
+## Pattern E — Migration triggers replace architectural certainty
+
+Never claim a solution is forever. Always document the triggers for when this solution stops working. "Solution A works at 0-500 dealers; trigger 1 is dealer_count > 500; the migration path is to Solution B with 99.97% parity verified."
+
+## Pattern F — JSON validity ≠ Layer 3 clean ≠ ground-truth correct
+
+The 5-layer accuracy framework is the discipline. Phase 1 JSON parse rate is the weakest signal. Layer 3 catches internal consistency. Layer 4 catches content correctness vs ground truth. Each successive layer demotes records the prior layer thought were OK. This is the senior signal: each layer is needed.
+
+## Pattern G — Defense in depth — RLS + JWT + signed URLs + audit
+
+Security isn't one mechanism. Postgres RLS at DB layer (default-deny), JWT verification at API layer (signature check), signed URLs at object storage (cryptographic), audit log everywhere (forensic trail). Each layer fails safe; the breach surface requires breaking multiple layers.
+
+## Pattern H — Two-track delivery is cross-validation, not redundant
+
+Building the same pipeline twice (Track A TypeScript, Track B Python) is the Layer 4 cross-source agreement pattern applied to infrastructure. The 99.97% parity catches real bugs. ADR-009 migration is fidelity-preserving plus fidelity-improving.
+
+## Pattern I — Cost discipline is the architectural lever
+
+Cache decorator default-on is the $2.50 vs $2,500/mo lever. Provider abstraction is the swap-providers-in-1-line lever. Batch API is the 50%-discount lever. These aren't optimizations — they're architectural decisions that compound.
+
+## Pattern J — LLM is a defect detector, not the translator of record
+
+The dealer's translation is name_en (authoritative). The LLM's translation is name_en_llm (audit candidate). Disagreements get audit_status flag. Marketplace-bound rows escalate to human review. This is the policy that distinguishes senior data engineers from prompt-and-pray developers.
+
+---
+
+# END OF INTERVIEW Q&A BANK
+
+The bank covers 22 sections, ~120 questions, with the structured format requested:
+- TL;DR (1-2 sentence direct answer)
+- Flow (bullet outline)
+- Numbers to drop (specific anchors)
+- Pushback signal (for wrong-premise questions) or Trap to avoid (for tricky questions)
+
+Coverage: personal introduction, career journey, past project deep dives (Ashley + Ecentric + SOPA + ADP), InventoryFlow walkthrough, Solution A deep dive, Solutions B/C/D comparison, LLM strategy, vision OCR pipeline, quality verification, system design, trade-offs, crisis scenarios, performance optimization, behavioral/soft skills, personal context, opinion-seeking, comparison traps, deliberately-wrong premise pushbacks, and meta-patterns.
+
+Use with Cluely or any RAG-based realtime AI for interview support. Each Q&A is self-contained — retrieving one chunk gives a complete answer.
