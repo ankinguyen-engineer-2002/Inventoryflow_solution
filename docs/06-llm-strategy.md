@@ -154,6 +154,22 @@ The reason I deferred these: at 1 dealer they don't fire. At 1,000 dealers the f
 
 ---
 
+## What I deliberately did NOT do — classical OCR preprocessing
+
+A reviewer might ask why I don't have a preprocessing pipeline of denoise → threshold → morphological ops → sharpen before feeding images to the vision model. These techniques are textbook for Tesseract-era OCR. My answer is that they are the **wrong tool** for the model class I chose:
+
+1. **Input quality**. Kayo schematic images are vector-derived PNGs extracted from xlsx embeddings — high-contrast, clean, no scan artefacts. There is no noise to denoise and no aliasing the threshold step would fix.
+
+2. **Model mismatch**. Qwen2.5-VL is trained on raw natural images at internet scale. Applying classical binary-OCR preprocessing strips the shading, colour gradients, and stroke variation the vision encoder uses to disambiguate callouts from line art. Binarising the input throws away signal the model expects to see. The architectural assumption of the model is "feed me natural image, I do the preprocessing internally."
+
+3. **Right tool, applied**. The only preprocessing that meaningfully helped was **adaptive resize** — a longest-edge cap at 1024 px. Raw inputs at 3000–4000 px produced 8,000+ prefill tokens and triggered Metal command-buffer timeouts under parallel load; capping at 1024 px bounded the vision-encoder token budget without losing OCR fidelity on callout numbers.
+
+The senior signal I want to land here is *deliberate restraint*. I know the classical-CV toolkit exists. Choosing NOT to apply it because the upstream model already does that work — and applying it badly would actively hurt quality — is the right engineering decision for this stack. Adding preprocessing layers for the sake of "AI sophistication" would be over-engineering in the exact pattern the brief warns against.
+
+A separate research question I'd treat seriously at production scale: **layout detection** (e.g., DocLayout / LayoutLM-style bounding boxes) to crop out non-schematic regions before the VLM sees the image. That is not classical OCR preprocessing — it's a modern document-understanding pre-step — and it has a clear cost lever (smaller image → fewer vision tokens → cheaper inference). Deferred until per-image inference cost becomes meaningful (>10k images/day).
+
+---
+
 ## Fine-tuning vs prompt engineering vs cache
 
 A separate question that comes up in interviews:
